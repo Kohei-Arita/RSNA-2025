@@ -1,6 +1,6 @@
-# RSNA-2025 — Intracranial Aneurysm Detection (Colab-First)
+# RSNA-2025 — Intracranial Aneurysm Detection（Colab-First / Kaggle Notebooks Only 対応）
 
-本プロジェクトの実行環境は Google Colab を前提に設計しています。以降の手順・コマンドは Colab 上での利用を想定しています（Drive 連携、Kaggle API、Weights & Biases を使用）。Colab での Drive マウントや入出力の流れは Colab 公式ノートブック「Local Files, Drive, Sheets, and Cloud Storage」を基準にしています。
+本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・最大実行時間≒12時間）の二層設計を前提とします。以降の手順・コマンドは Colab 上での利用（Drive 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を想定しています。Colab の Drive マウントや入出力の流れは Colab 公式ノートブック「Local Files, Drive, Sheets, and Cloud Storage」を基準にしています。
 
 ## 目次
 
@@ -12,6 +12,7 @@
 - [EDA（探索的データ分析）](#eda探索的データ分析)
 - [学習（Hydra/CLI + W&B ロギング）](#学習hydra-cli--wb-ロギング)
 - [推論・OOF・可視化](#推論oof可視化)
+- [提出（Kaggle Notebooks Only / オフライン）](#提出kaggle-notebooks-only--オフライン)
 - [提出（Submission 自動化）](#提出submission-自動化)
 - [実験管理ポリシー](#実験管理ポリシー)
 - [Make タスク](#make-タスク)
@@ -319,6 +320,34 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 python kaggle/kaggle_infer.py  # 実装後、submission.csv を生成
 ```
 
+### オフラインpip（wheel / Add data）
+
+```bash
+# 依存が標準コンテナに無い場合のみ。wheel を事前に収集して Dataset 化（例: rsna2025-wheels）
+pip install --no-index --find-links /kaggle/input/rsna2025-wheels -r kaggle/offline_requirements.txt
+python - <<'PY'
+import torch, os
+print('torch', torch.__version__)
+print('cuda', torch.cuda.is_available())
+PY
+```
+
+### 時間ガード（推論用の自動ダウングレード指針）
+
+- 概算 ETA が上限（≒12h）を超えそうな場合に優先順位で無効化/粗化
+  - TTA 停止 → パッチストライドを粗く → 候補数上限を縮小 → 入力解像度を縮小
+- “完走最優先” を原則とし、ダウングレードの切替は `kaggle_infer.py` 内で実装（コメント済、後続で実装）
+
+### CSV 検証強化（軽量）
+
+```bash
+python tools/verify_submission.py /kaggle/working/submission.csv
+```
+
+- 列名・dtype・NaN/Inf を検査
+- スコア/座標の値域・ID 形式・重複行を検出
+- 仕様確定後に `tools/verify_submission.py` 内コメントへ反映（実装は後続）
+
 ## ローカル乾式リハーサル
 
 ```bash
@@ -327,9 +356,9 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 
 ## 変更点（この改訂で追加された骨組み）
 
-- `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`
+- `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（Kaggle 12h 完走前提の軽量設定）
 - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
-- `tools/pack_precompute.py`, `tools/verify_submission.py`
+- `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
 - `Makefile` の kaggle タスク（prep/dryrun/wheels）
 
@@ -337,7 +366,7 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 
 - kaggle_infer: 候補点ロード→3Dパッチ切り出し→モデル推論→NMS→CSV
 - pack_precompute: 再サンプル/脳マスク/候補点の形式確定→梱包
-- verify_submission: 列・値域・NaN/Inf 検証
+- verify_submission: 列名/dtype/NaN・Inf/重複/値域の軽量検証
 
 ## 実験管理ポリシー
 
