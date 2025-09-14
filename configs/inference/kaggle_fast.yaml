@@ -1,0 +1,20 @@
+# 12h 制限・オフライン向け軽量推論（実装詳細は後続で埋める）
+inference:
+  num_workers: 2
+  batch_size: 4
+  amp: true
+  tta: false
+  save_logits: false
+  use_precomputed_candidates: true
+  patch_size: [64, 64, 64]
+  patch_stride: [32, 32, 32]
+  score_threshold: 0.10
+  nms_iou: 0.2
+  max_detections: 50
+
+model:
+  name: baseline_3d_patch  # TODO: 実モデル名に合わせて更新
+  checkpoint: ${paths.models_dir}/exp0001_fold0_best.ckpt
+
+io:
+  submission_csv: ${paths.work_dir}/submission.csv

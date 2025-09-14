@@ -251,98 +251,93 @@ DVC 公式の手順に沿って gdrive 連携を使えます（dvc_gdrive が必
 
 💡 DVC の Google Drive 認可でブロック表示が出るケースがある旨は公式に注記があります（ワークアラウンドあり）。困った場合は該当ページを参照してください。
 
-## データ取得（Kaggle API → DVC/Drive 連携）
+## フロー概観（Colab=研究 / Kaggle=提出）
 
-### A. Kaggle から公式データを取得（Colab）
+- 研究（Colab）: データ取得→EDA→学習→評価（W&B可）
+- 提出（Kaggle）: 前計算/重みの Dataset を追加→最小推論→CSV 提出（オフライン）
+- 切替（例）: `paths=colab` / `paths=kaggle wandb=disabled inference=kaggle_fast`
 
-Kaggle API の基本コマンドを用います（競技名は rsna-intracranial-aneurysm-detection）。
+## データ取得（Colab）
+
+- Kaggle API で公式データ取得（既存手順）
+- DVC remote（任意）でチーム共有
 
 ```bash
-# 競技規約に同意済みであることが前提
-!kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw
-!unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
+# 公式データ（概要、詳細は上のセクション参照）
+kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw
+unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
+# DVC（任意）
+dvc pull
 ```
 
-### B. DVC で同期（チーム共有・復元用）
+## EDA（Colab）
 
-チームで Drive を DVC remote にしている場合、dvc pull / dvc push で同期します。
+- `notebooks/00_eda.ipynb` を使用
+- 入出力は `configs/data/*.yaml` を尊重（コメントで方針のみ）
 
-既存の加工物（data/processed など）を復元する場合も dvc pull。新たに生成したら dvc add → dvc push。
+## 学習（Colab, Hydra/CLI）
 
-## EDA（探索的データ分析）
-
-- 共通 EDA は notebooks/00_eda.ipynb を Colab で開き、入出力は configs/data/*.yaml を尊重する方針。
-- 大規模 EDA でキャッシュが必要な場合は configs/data/cache.yaml を調整してから実行。
-- Colab での Drive I/O は公式手順（上記）に準拠。
-
-## 学習（Hydra/CLI + W&B ロギング）
-
-### 1) CLI の基本
-
-Hydra のオーバライド構文を使って、1 コマンドで構成を合成・実行します。
+- 基本: `python -m rsna_aneurysm.cli train ... paths=colab`
+- W&B ログは有効（必要なら `wandb=disabled` で停止可）
 
 ```bash
-# 例：2D ベースラインを患者KFoldで学習、FP16有効、W&B プロジェクト名指定
 python -m rsna_aneurysm.cli train \
-  model=baseline_2d \
-  cv=patient_kfold \
-  train=base,fp16 \
-  data=rsna \
-  paths=colab \
-  wandb.project=RSNA2025 \
-  train.batch_size=16 train.max_epochs=10
+  model=baseline_2d cv=patient_kfold train=base,fp16 data=rsna \
+  paths=colab wandb.project=RSNA2025
 ```
 
-### 2) マルチラン（簡易スイープ）
+## 推論・評価（Colab）
 
-Hydra の multirun（-m）で複数設定を一括実行可能です。必要に応じてスイーパープラグインも利用できます。
-
-```bash
-# 例：学習率と重み減衰のグリッド
-python -m rsna_aneurysm.cli -m train=base,fp16 \
-  train.optimizer.lr=1e-3,3e-4 \
-  train.optimizer.weight_decay=1e-4,1e-5
-```
-
-### 3) Weights & Biases でのトラッキング
-
-初回は wandb login（上記）→ 以降は自動でログされます。
-
-スクリプト側では wandb.init(project=..., config=...)・メトリクス/画像/アーティファクトをロギングできます。
-
-## 推論・OOF・可視化
-
-**推論**：
+- OOF/可視化は既存ノート/スクリプトを利用
+- 提出用推論は Kaggle 側に最小化して分離
 
 ```bash
 python -m rsna_aneurysm.cli infer \
-  inference=base \
-  model=baseline_2d \
-  paths=colab \
+  inference=base model=baseline_2d paths=colab \
   checkpoint_path=models/exp0001_fold0_best.ckpt
 ```
 
-**OOF 生成・評価**：experiments/expXXXX/evaluation.ipynb を実行、または src/rsna_aneurysm/oof_utils.py のラッパーを呼びます。
+## 提出準備（前計算と重みの固定, Colab もしくはローカル）
 
-**可視化（学習曲線・Grad-CAM 等）**：src/rsna_aneurysm/visualization.py / reports/figures/ を参照。
-
-## 提出（Submission 自動化）
-
-提出は Kaggle API で行います。競技ページの規約に従い、submissions/に生成した CSV を送信します。
+- 前計算を梱包（スケルトン）: `make kaggle-prep`
+- 学習済み重みを `dist/rsna2025-weights/` に集約（手動/スクリプト）
+- それぞれ Kaggle Dataset として登録（Private で可）
 
 ```bash
-# 例：tools/submit.py で CSV を生成した後、Kaggle API による提出
-python tools/submit.py --input outputs/preds/exp0001_fold-avg.csv \
-                       --output submissions/exp0001.csv
-
-# Kaggle に投稿（コメント付き）
-kaggle competitions submit \
-  -c rsna-intracranial-aneurysm-detection \
-  -f submissions/exp0001.csv \
-  -m "exp0001: baseline_2d + fp16 + patient_kfold"
+make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 ```
 
-Colab での API 利用は Kaggle 公式の Public API/GitHub の README に準拠しています。
+## 提出（Kaggle Notebooks Only / オフライン）
+
+- Notebook: `kaggle/notebook_template.ipynb` をアップロード
+- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加
+- `kaggle/kaggle_infer.py` を実行 → `/kaggle/working/submission.csv`
+- 軽量検証（スケルトン）: `tools/verify_submission.py`
+
+```bash
+# Kaggle 環境（概念図）
+python kaggle/kaggle_infer.py  # 実装後、submission.csv を生成
+```
+
+## ローカル乾式リハーサル
+
+```bash
+make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
+```
+
+## 変更点（この改訂で追加された骨組み）
+
+- `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`
+- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
+- `tools/pack_precompute.py`, `tools/verify_submission.py`
+- `tests/test_dicom_geometry.py`（現状 skip）
+- `Makefile` の kaggle タスク（prep/dryrun/wheels）
+
+## 次ステップ（実装方針だけ明記）
+
+- kaggle_infer: 候補点ロード→3Dパッチ切り出し→モデル推論→NMS→CSV
+- pack_precompute: 再サンプル/脳マスク/候補点の形式確定→梱包
+- verify_submission: 列・値域・NaN/Inf 検証
 
 ## 実験管理ポリシー
 
@@ -412,3 +407,23 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 - [W&B Quickstart / Colab 例](https://docs.wandb.ai/quickstart)
 - [DVC × Google Drive（remote 設定）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-drive)
 - [Hydra 基本のオーバライド構文](https://hydra.cc/docs/advanced/override_grammar/basic/)
+
+## Kaggle Notebooks Only 対応（研究=Colab / 提出=Kaggle の二層設計）
+
+> 最低限の案内のみ。実装詳細は後続ステップで追加予定。
+
+- 切替例（Hydra）: `paths=kaggle wandb=disabled inference=kaggle_fast`
+- 追加ファイル（骨組み）:
+  - `configs/paths/kaggle.yaml` / `configs/wandb/disabled.yaml`
+  - `configs/inference/kaggle_fast.yaml`
+  - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
+  - `tools/pack_precompute.py`（前計算梱包・スケルトン）
+  - `tools/verify_submission.py`（提出検証・スケルトン）
+  - `tests/test_dicom_geometry.py`（幾何テスト・後続で実装）
+- Make タスク:
+  - `make kaggle-prep` / `make kaggle-dryrun` / `make wheels`
+
+TODO:
+- 推論本体（パッチ推論・NMS・CSV出力）を `kaggle/kaggle_infer.py` に実装
+- 前計算仕様（フォーマット/項目）と `tools/pack_precompute.py` の実装
+- 検証ツール・幾何テストの具体化
