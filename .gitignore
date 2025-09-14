@@ -1,1 +1,76 @@
-# data/models/submissions ji’ikd
+# Data directories
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/external/*
+!data/external/.gitkeep
+
+# Model files
+models/*
+!models/.gitkeep
+*.pth
+*.onnx
+*.pkl
+*.joblib
+
+# Submissions
+submissions/*
+!submissions/.gitkeep
+
+# Kaggle
+.kaggle/kaggle.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# DVC
+.dvc/tmp/
+.dvc/cache/
+
+# Weights & Biases
+wandb/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# GitHub Workflows (prevent OAuth scope issues)
+.github/workflows/
