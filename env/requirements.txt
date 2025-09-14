@@ -1,0 +1,2 @@
+# [AUTO-GENERATED] Colab用。編集禁止。
+# 生成コマンド例: `make deps-freeze`
