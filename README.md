@@ -1,11 +1,2 @@
-# RSNA-2025
-
-RSNA (Radiological Society of North America) 2025 project repository.
-
-## Project Overview
-
-This repository is set up for RSNA-2025 related work and development.
-
-## Getting Started
-
-Repository initialized and connected to GitHub.
+# プロジェクト概要・実行手順・命名規約・Kaggle/Colab手順
+# 追記: outputs/ と reports/ の境界ルールを2-3行で明記
