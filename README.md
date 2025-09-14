@@ -5,6 +5,7 @@
 ## 目次
 
 - [プロジェクト概要](#プロジェクト概要)
+- [提出要件（重要）](#提出要件重要)
 - [リポジトリ構成](#リポジトリ構成)
 - [前提条件](#前提条件)
 - [Colab セットアップ手順（初回）](#colab-セットアップ手順初回)
@@ -26,6 +27,13 @@
 - **追跡**：Weights & Biases（実験ロギング、アーティファクト管理の補助）。
 - **データ／成果物**：DVC + Google Drive remote でデータ版管理、submissions/ に提出物を一元管理。
 - **コンフィグ**：Hydra によるグループ分割・defaults 合成・マルチラン対応。
+
+## 提出要件（重要）
+
+- Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
+- 実行時間上限の目安：GPU/CPU ≈ 12時間、TPU ≈ 9時間。長時間化する処理は前計算を Dataset 化して持ち込む。
+
+（注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
 ## リポジトリ構成
 
@@ -251,6 +259,7 @@ DVC 公式の手順に沿って gdrive 連携を使えます（dvc_gdrive が必
 ```
 
 💡 DVC の Google Drive 認可でブロック表示が出るケースがある旨は公式に注記があります（ワークアラウンドあり）。困った場合は該当ページを参照してください。
+※ Google Drive 連携で "This app is blocked" 表示が出る既知事象あり。DVC 公式のワークアラウンドを参照。
 
 ## フロー概観（Colab=研究 / Kaggle=提出）
 
@@ -310,6 +319,10 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 
 ## 提出（Kaggle Notebooks Only / オフライン）
 
+### Notebook設定
+- 「Edit » Notebook settings」等から Internet: Off を選択し、保存してから実行する。
+  - Notebook-only 競技では明示的にインターネット無効が求められる場合があります。
+
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
 - 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加
 - `kaggle/kaggle_infer.py` を実行 → `/kaggle/working/submission.csv`
@@ -326,13 +339,15 @@ python kaggle/kaggle_infer.py  # 実装後、submission.csv を生成
 # 依存が標準コンテナに無い場合のみ。wheel を事前に収集して Dataset 化（例: rsna2025-wheels）
 pip install --no-index --find-links /kaggle/input/rsna2025-wheels -r kaggle/offline_requirements.txt
 python - <<'PY'
-import torch, os
-print('torch', torch.__version__)
-print('cuda', torch.cuda.is_available())
+import torch, sys
+print("torch", torch.__version__)
+print("cuda", torch.cuda.is_available())
 PY
 ```
 
 ### 時間ガード（推論用の自動ダウングレード指針）
+
+※ 実行中に症例あたり時間から ETA を見積もり、予算超過が見えたら TTA停止 → パッチストライド粗化 → 候補上限縮小 の順で自動ダウングレード（`kaggle_infer.py` 内）。12h 内完走を最優先。
 
 - 概算 ETA が上限（≒12h）を超えそうな場合に優先順位で無効化/粗化
   - TTA 停止 → パッチストライドを粗く → 候補数上限を縮小 → 入力解像度を縮小
@@ -341,7 +356,8 @@ PY
 ### CSV 検証強化（軽量）
 
 ```bash
-python tools/verify_submission.py /kaggle/working/submission.csv
+python tools/verify_submission.py /kaggle/working/submission.csv \
+  --id_regex '^[A-Za-z0-9_.-]+$' --deny_duplicates --check-range
 ```
 
 - 列名・dtype・NaN/Inf を検査
@@ -433,9 +449,11 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 ## 参考
 
 - [Kaggle API（Public API / GitHub README）](https://github.com/Kaggle/kaggle-api)
-- [W&B Quickstart / Colab 例](https://docs.wandb.ai/quickstart)
-- [DVC × Google Drive（remote 設定）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-drive)
-- [Hydra 基本のオーバライド構文](https://hydra.cc/docs/advanced/override_grammar/basic/)
+- [Kaggle Notebooks（Internet: Off / Add data の考え方）](https://www.kaggle.com/docs/notebooks)
+- [W&B Quickstart / wandb login（公式Docs）](https://docs.wandb.ai/quickstart)
+- [DVC × Google Drive（remote 設定 / 既知の注意）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-drive)
+- [Hydra 基本のオーバライド構文（Basic Override）](https://hydra.cc/docs/advanced/override_grammar/basic/)
+- [Hydra マルチラン（Multi-run / Sweeper）](https://hydra.cc/docs/advanced/multi-run/)
 
 ## Kaggle Notebooks Only 対応（研究=Colab / 提出=Kaggle の二層設計）
 
