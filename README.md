@@ -34,6 +34,151 @@
 - **outputs/** : 再生成可能・中間生成物（学習済みモデル、予測結果、キャッシュなど）
 - **reports/** : 永続共有・論文/発表用図表（最終レポート、共有用可視化、プレゼン資料など）
 
+### ディレクトリ構成
+
+```
+RSNA-2025/
+├── .github/                    # GitHub設定・テンプレート
+│   ├── CODEOWNERS             # コードオーナー設定
+│   ├── CONTRIBUTING.md        # コントリビューションガイド
+│   ├── ISSUE_TEMPLATE/        # Issue テンプレート
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── SECURITY.md            # セキュリティポリシー
+│
+├── configs/                   # Hydra設定ファイル群
+│   ├── config.yaml           # メイン設定・デフォルト値
+│   ├── aug/                  # データ拡張設定
+│   │   ├── light.yaml        # 軽量拡張（高速実験用）
+│   │   ├── medium.yaml       # 中程度拡張（バランス型）
+│   │   └── heavy.yaml        # 重拡張（最終精度向上用）
+│   ├── cv/                   # 交差検証設定
+│   │   ├── patient_kfold.yaml # 患者単位のKFold
+│   │   ├── groupkfold.yaml   # グループKFold
+│   │   └── seeds.yaml        # シード・分割設定
+│   ├── data/                 # データセット設定
+│   │   ├── rsna.yaml         # RSNA公式データ設定
+│   │   ├── cache.yaml        # キャッシュ戦略設定
+│   │   └── external.yaml     # 外部データ設定
+│   ├── model/                # モデルアーキテクチャ設定
+│   │   ├── baseline_2d.yaml  # 2Dベースライン（CNN）
+│   │   ├── efficientnet.yaml # EfficientNet系
+│   │   ├── convnext.yaml     # ConvNeXt系
+│   │   ├── vit.yaml          # Vision Transformer
+│   │   └── three_d_cnn.yaml  # 3D CNN（ボリューム処理）
+│   ├── train/                # 学習設定
+│   │   ├── base.yaml         # 基本学習設定
+│   │   ├── fp16.yaml         # 混合精度学習
+│   │   ├── swa.yaml          # Stochastic Weight Averaging
+│   │   ├── earlystop.yaml    # Early Stopping設定
+│   │   └── tta.yaml          # Test Time Augmentation
+│   ├── inference/            # 推論設定
+│   │   ├── base.yaml         # 基本推論設定
+│   │   └── export.yaml       # モデルエクスポート設定
+│   └── paths/                # 環境別パス設定
+│       ├── local.yaml        # ローカル環境
+│       ├── colab.yaml        # Google Colab環境
+│       └── kaggle.yaml       # Kaggle Notebook環境
+│
+├── data/                     # データディレクトリ（DVC管理）
+│   ├── raw/                  # 生データ（Kaggle取得）
+│   ├── interim/              # 中間処理データ
+│   ├── processed/            # 前処理済みデータ
+│   └── external/             # 外部データ（追加データセット等）
+│
+├── src/rsna_aneurysm/        # メインソースコード
+│   ├── __init__.py
+│   ├── cli.py                # CLIエントリーポイント（Hydra）
+│   ├── datamodule.py         # Lightning DataModule
+│   ├── dataset.py            # Dataset実装（DICOM処理）
+│   ├── dicom_utils.py        # DICOM読み込み・前処理
+│   ├── model.py              # Lightning Module（学習ループ）
+│   ├── loss.py               # 損失関数（Focal Loss等）
+│   ├── metrics.py            # 評価指標（AUC、Sensitivity等）
+│   ├── transforms.py         # データ拡張・前処理
+│   ├── optimizer.py          # オプティマイザー設定
+│   ├── scheduler.py          # 学習率スケジューラー
+│   ├── inference.py          # 推論・予測処理
+│   ├── oof_utils.py          # Out-of-Fold予測・評価
+│   ├── postprocess.py        # 後処理（アンサンブル等）
+│   ├── visualization.py      # 可視化（Grad-CAM、学習曲線）
+│   ├── registry.py           # モデル・コンポーネント登録
+│   └── utils.py              # ユーティリティ関数
+│
+├── experiments/              # 実験管理（1ディレクトリ=1実験）
+│   └── exp0001_baseline/     # 実験例：ベースライン
+│       ├── config.yaml       # 実験時のHydra合成設定（再現性）
+│       ├── training.ipynb    # 学習実行ノートブック
+│       ├── evaluation.ipynb  # 評価・OOF生成ノートブック
+│       ├── inference.ipynb   # 推論実行ノートブック
+│       └── notes.md          # 実験メモ・W&Bリンク・振り返り
+│
+├── notebooks/                # 探索・分析用Jupyter Notebook
+│   ├── 00_eda.ipynb         # 探索的データ分析（EDA）
+│   ├── 01_error_analysis.ipynb # エラー分析・失敗例調査
+│   ├── 99_playground.ipynb   # 自由実験・プロトタイプ
+│   └── README.md             # Notebook使用ガイド
+│
+├── outputs/                  # 再生成可能な出力（.gitignore対象）
+│   ├── oof/                  # Out-of-Fold予測結果
+│   └── preds/                # テストセット予測結果
+│
+├── models/                   # 学習済みモデル（DVC/W&B管理）
+│
+├── reports/                  # 永続的な成果物・共有資料
+│   └── figures/              # 論文・発表用図表
+│
+├── submissions/              # Kaggle提出ファイル
+│
+├── tests/                    # 単体テスト・統合テスト
+│   ├── test_dataset.py       # データセットテスト
+│   ├── test_transforms.py    # 前処理テスト
+│   ├── test_metrics.py       # 評価指標テスト
+│   └── test_inference.py     # 推論テスト
+│
+├── tools/                    # ユーティリティスクリプト
+│   ├── submit.py             # Kaggle提出自動化
+│   ├── export_onnx.py        # ONNXエクスポート
+│   ├── kaggle_sync.py        # Kaggleデータ同期
+│   ├── sweep_wandb.py        # W&Bスイープ実行
+│   └── seed_everything.py    # 再現性確保
+│
+├── docs/                     # プロジェクト関連ドキュメント
+│   ├── colab_setup.md        # Colab環境構築詳細手順
+│   ├── experiment_workflow.md # 実験ワークフロー解説
+│   ├── dvc_remote.md         # DVC remote設定ガイド
+│   └── DATASET_CARD.md       # データセット詳細・制約
+│
+├── env/                      # 環境・依存関係管理
+│   ├── requirements.txt      # Colab用依存関係（配布用）
+│   ├── requirements.lock     # ロックファイル（再現性）
+│   └── colab_setup.ipynb     # Colab初期設定ノートブック
+│
+├── .kaggle/                  # Kaggle API設定
+│   └── kaggle.json.example   # API認証ファイル例
+│
+├── dvc.yaml                  # DVCパイプライン定義
+├── dvc.lock                  # DVCロックファイル
+├── dvc.config.example        # DVC設定例（Google Drive）
+├── pyproject.toml            # Python依存関係・メタデータ（真実源）
+├── Makefile                  # 開発タスク自動化
+└── README.md                 # このファイル
+```
+
+### 主要ファイルの役割
+
+**設定管理**：
+- `configs/config.yaml` : Hydraのメイン設定、全体のデフォルト値
+- `pyproject.toml` : Python依存関係の真実源、プロジェクトメタデータ
+- `dvc.yaml` : データパイプライン定義、再現性確保
+
+**実行エントリーポイント**：
+- `src/rsna_aneurysm/cli.py` : メインCLI（学習・推論・評価の統一インターフェース）
+- `tools/submit.py` : Kaggle提出自動化スクリプト
+
+**実験管理**：
+- `experiments/expXXXX/` : 各実験の設定・ノートブック・メモを一元管理
+- `notebooks/` : EDA・分析・プロトタイプ用途
+
 ## 前提条件
 
 - Google アカウント（Colab と Drive 利用）
