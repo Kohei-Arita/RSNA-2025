@@ -604,3 +604,48 @@ TODO:
 - README に設計レビューと契約リンクを追記
 
 参考: 提出契約は voxel 座標（`z,y,x`）とし、`confidence∈[0,1]`。詳細は `docs/SUBMISSION_CONTRACT.md` を参照。
+
+## この改訂での“最小追加”（実装はせずコメント方針のみ固定）
+
+- **幾何テストの強制化（コメント方針）**: `tests/test_dicom_geometry.py` の skip を解除する前提で、以下の一致をテストで担保する方針を明記。
+  - **spacing/厚み/傾斜**: PixelSpacing, SliceThickness, gantry tilt
+  - **方位・符号**: ImageOrientationPatient, 左右/前後/頭尾の符号一貫性
+  - **強度**: RescaleSlope/Intercept の適用と窓関数の一貫性
+  - **等方 resample**: 3D→等方 resample のパイプライン一貫性
+  - 失敗時は学習/推論を停止する運用（コメントで明記、実装は後続）
+
+- **二段構え（候補→パッチ分類）の確定（コメント方針）**:
+  - Colab: 軽量 3D U-Net/CenterNet で候補ヒートマップ→Top-K 座標抽出→ `rsna2025-precompute` に梱包（`candidates.csv`, `volume.npz`）。
+  - Kaggle: 候補パッチのみ高精度 3D/2.5D 分類→NMS→CSV。時間ガードで TTA→stride→候補N→解像度の順に縮退。
+
+- **mm スケール準拠の NMS/評価（コメント方針）**:
+  - NMS 半径および一致判定を mm 単位で固定（PixelSpacing/SliceThickness 由来）。
+  - `tools/verify_submission.py` に voxel⇄mm の往復検証（コメント）を追加予定。
+  - 真実源は `docs/SUBMISSION_CONTRACT.md` に記載し、`configs/inference/kaggle_fast.yaml` と整合。
+
+### 追加された実験ディレクトリ（コメントのみのスケルトン）
+
+```
+experiments/
+├── exp0001_baseline/
+│   ├── config.yaml
+│   ├── training.ipynb
+│   ├── evaluation.ipynb
+│   ├── inference.ipynb
+│   └── notes.md
+├── exp0002_candidates/
+│   ├── config.yaml    # コメントのみ（候補ヒートマップ→Top-K 抽出の方針）
+│   └── notes.md       # コメントのみ（運用・搬入ポリシー）
+├── exp0003_patchclf/
+│   ├── config.yaml    # コメントのみ（3D/2.5D パッチ分類の方針）
+│   └── notes.md       # コメントのみ（TTA/時間ガード運用）
+├── exp0004_nms_contract/
+│   ├── config.yaml    # コメントのみ（mm スケール NMS/判定の契約）
+│   └── notes.md       # コメントのみ（検証方針）
+└── exp0005_ensemble_light/
+    ├── config.yaml    # コメントのみ（軽量アンサンブル + 時間ガード）
+    └── notes.md       # コメントのみ（P100/T4 実測で閾値校正）
+```
+
+- **運用**: すべて Colab で学習・検証し、Kaggle では `kaggle/kaggle_infer.py` の実行に限定（Internet: Off, wheels データセット併用）。
+- **契約**: 提出 CSV は voxel (`z,y,x`) と `confidence∈[0,1]`。NMS/距離判定は mm 単位。`docs/SUBMISSION_CONTRACT.md` を真実源とする。

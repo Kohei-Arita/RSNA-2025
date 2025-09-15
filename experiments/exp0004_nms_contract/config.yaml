@@ -1,0 +1,13 @@
+# exp0004_nms_contract — コメントのみのスケルトン
+# 目的: mm スケールでの NMS/距離判定の契約を固定
+# 入力: exp0003 の候補スコア（座標は voxel z,y,x）
+# 仕様: PixelSpacing/SliceThickness 由来の物理スケールで半径を定義
+# 注意: 実装は行わず、verify_submission.py に検証方針コメントのみ反映。
+#
+# 契約（コメント）:
+# - NMS 半径: r_mm を固定し、ケース内で voxel⇄mm を往復して一貫性を担保
+# - 距離一致判定: 提出契約の閾値 d_mm を固定
+# - 検証: tools/verify_submission.py に変換の往復テストを追加（コメント）
+#
+# 出力（コメント）:
+# - submission.csv（id, z, y, x, confidence）を生成する前提の契約確認のみ

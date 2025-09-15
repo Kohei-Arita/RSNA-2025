@@ -1,0 +1,19 @@
+# exp0002_candidates — コメントのみのスケルトン
+# 目的: 軽量 3D U-Net 等で候補ヒートマップ学習 → Top-K 座標抽出
+# 出力: rsna2025-precompute/<case_id>/candidates.csv, volume.npz（等方 resample, float16）
+# 注意: 実装は行わず、仕様コメントのみを記載する。
+#
+# 学習方針（コメント）:
+# - 入力: 等方再サンプル済み 3D ボリューム（voxel 空間）
+# - ターゲット: 病変中心のガウスヒートマップ（回帰） or 中心点検出（CenterNet系）
+# - 出力: Top-K 候補（z,y,x,score）を candidates.csv に保存
+# - 評価: 感度優先、偽陽性は次段の分類で抑制
+#
+# I/O（コメント）:
+# - 入力パス: configs/paths/ に準拠
+# - 出力先: dist/rsna2025-precompute/ に梱包（tools/pack_precompute.py）
+#
+# CV（コメント）:
+# - 患者単位 split（configs/cv/patient_kfold.yaml）を厳守
+#
+# 実装は後続実験で追加。ここではコメントのみ。

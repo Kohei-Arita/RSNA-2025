@@ -1,0 +1,16 @@
+# exp0003_patchclf — コメントのみのスケルトン
+# 目的: 候補パッチの 3D/2.5D 高精度分類（AMP, channels-last）
+# 入力: exp0002 の candidates.csv と volume.npz
+# 出力: 候補ごとの refined score（OOF/val 評価含む）
+# 注意: 実装は行わずコメントのみ。
+#
+# モデル候補（コメント）:
+# - 3D CNN（EfficientNet-3D, ConvNeXt-3D）
+# - 2.5D ViT-hybrid（近傍スライススタック）
+#
+# 推論ポリシー（コメント）:
+# - TTA は 2 → 0 に自動ダウングレード（時間ガード）
+# - NMS は mm スケールで実施（次実験で契約固定）
+#
+# CV（コメント）:
+# - 患者単位 split 前提。fold アンサンブルを最終で評価。
