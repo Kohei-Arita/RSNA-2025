@@ -658,4 +658,4 @@ experiments/
 ```
 
 - **運用**: すべて Colab で学習・検証し、Kaggle では `kaggle/kaggle_infer.py` の実行に限定（Internet: Off, wheels データセット併用）。
-- **契約**: 提出 CSV は voxel (`z,y,x`) と `confidence∈[0,1]`。NMS/距離判定は mm 単位。`docs/SUBMISSION_CONTRACT.md` を真実源とする。
+- **契約**: 提出 CSV は `series_id` と 14 ラベル列（`aneurysm_present` + 13 部位）の確率 [0,1]。真実源は公式評価API仕様で、`docs/SUBMISSION_CONTRACT.md` はその同期要約とする。
