@@ -435,6 +435,7 @@ PY
 - 概算 ETA が上限（≒12h）を超えそうな場合の優先順位
   - 入力解像度（短辺基準）を段階的に下げる → TTA 停止 → パッチストライドを粗く → 候補数上限を縮小
 - “完走最優先” を原則とし、ダウングレードの切替は `kaggle_infer.py` 内で実装（コメント済、後続で実装）
+ - 推論高速化の実務指針（本追記）: AMP（半精度）/TorchScript/ONNX を優先適用し、適用可能な層に対して dynamic quantization（int8）を使用。自動ダウングレード（解像度→TTA→stride→候補数）と併用し 12h 制限での完走率とスループットを最大化する（詳細は `experiments/exp0007_2p5d_mainline/` を参照）。
 
 ### CSV 検証強化（軽量）
 
@@ -565,6 +566,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
   - `tools/pack_precompute.py`（前計算梱包・スケルトン）
   - `tools/verify_submission.py`（提出検証・スケルトン：`series_id` + 14 ラベル確率の検証を想定）
   - `tests/test_dicom_geometry.py`（幾何テスト・後続で実装）
+  - 追加（本追記）: `configs/train/presence_calibration.yaml`, `configs/inference/modality_thresholds.yaml`, `configs/model/two_point_five_d.yaml`
 - Make タスク:
   - `make kaggle-prep` / `make kaggle-dryrun` / `make wheels`
 
@@ -604,6 +606,10 @@ TODO:
 - Precompute スキーマの明文化: `docs/DATASET_CARD.md` に追記
 - CV 分割の固定化: サンプル `data/processed/cv_fold_assign.example.csv` を追加
 - README に設計レビューと契約リンクを追記
+ - 最小の高インパクト改善（本追記で方針のみ固定）:
+   - presence 校正の徹底強化（重み13に直結）: presence ヘッドの損失を class-balanced BCE + focal（γ>0）で強化し、OOF で温度スケーリング/等分位校正を適用。方針スケルトンを `configs/train/presence_calibration.yaml` に追加し、検証実験を `experiments/exp0006_presence_calib/` に分離。モダリティ（CTA/MRA/MRI）差に対しては `configs/inference/modality_thresholds.yaml` で modality-wise threshold を CV で同定。
+   - 2.5D 主力 + 軽量3D補助 + 推論最適化: スライス CNN + RNN（LSTM/GRU）による 2.5D を presence/部位の第一主力に据え、3D は候補パッチ分類の補助に限定。推論では AMP + TorchScript/ONNX + dynamic quantization を活用し、時間ガード（解像度→TTA→stride→候補数）と併用して 12h 制限下での“速くて強い”実行を担保。方針スケルトンを `configs/model/two_point_five_d.yaml` と `experiments/exp0007_2p5d_mainline/` に追加。
+   - 公開外部の事前学習の活用（ルール順守・出所明記）: 頭部 CT/MR 近縁の公開データや自己教師あり（例: 3D MAE 系）で backbone を事前学習し、本データで微調整。学習は Colab、重み搬入は Kaggle Datasets（Private, Add data）。出所・ライセンス・再現手順は `docs/DATASET_CARD.md` に明記。検証実験は `experiments/exp0008_external_pretrain/` に分離。
 
 参考: 現時点のデフォルトは voxel 座標（`z,y,x`）と `confidence∈[0,1]`。ただし差異があれば**公式評価API仕様を常に優先**し、`docs/SUBMISSION_CONTRACT.md` を同期更新。
 
@@ -655,6 +661,21 @@ experiments/
 └── exp0005_ensemble_light/
     ├── config.yaml    # コメントのみ（軽量アンサンブル + 時間ガード）
     └── notes.md       # コメントのみ（P100/T4 実測で閾値校正）
+```
+
+- 追加予定の実験ディレクトリ（本追記、コメントのみのスケルトン）
+
+```
+experiments/
+├── exp0006_presence_calib/
+│   ├── config.yaml    # コメントのみ（presence 損失重み・校正・しきい値検証）
+│   └── notes.md       # コメントのみ（OOF 校正・評価指標の扱い）
+├── exp0007_2p5d_mainline/
+│   ├── config.yaml    # コメントのみ（2.5D 主力 + 軽量3D補助 + 推論最適化）
+│   └── notes.md       # コメントのみ（AMP/TorchScript/ONNX/quantization の運用）
+└── exp0008_external_pretrain/
+    ├── config.yaml    # コメントのみ（公開外部事前学習→微調整の手順）
+    └── notes.md       # コメントのみ（ルール順守・出所/ライセンス記載）
 ```
 
 - **運用**: すべて Colab で学習・検証し、Kaggle では `kaggle/kaggle_infer.py` の実行に限定（Internet: Off, wheels データセット併用）。

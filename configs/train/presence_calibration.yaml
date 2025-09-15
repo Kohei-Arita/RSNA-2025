@@ -1,0 +1,4 @@
+# コメントのみスケルトン（presence 校正ポリシー）
+# - 損失: class-balanced BCE + optional focal gamma
+# - 校正: 温度スケーリング / 等分位（OOF 基準）
+# - 出力: CV 由来のモダリティ別しきい値
