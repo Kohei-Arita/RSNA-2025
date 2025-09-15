@@ -1,0 +1,31 @@
+# コメントのみ（実装なし）
+# 目的: 提供の13解剖学的ロケーション（血管領域マップ/セグ）を補助信号として活用し、
+#       位置の正確さと部位別精度を高める実験。コード本線は変更せず、実験系として分離。
+
+# 方針（いずれか、もしくは併用。弱教師/補助損失として実装想定）
+# - ROIプーリング or マスク付きAttentionで、部位別ヘッドを監督（presence/部位の補助Loss）。
+# - 候補抽出→NMS/一致判定を mm スケール + 部位マスク内優先で再重み付け。
+
+# データ（例示。利用可否・出所は Rules を最優先し、docs/DATASET_CARD.md に明記）
+# data:
+#   use_anatomy_masks: true      # 13血管領域の3Dマスクがある症例のみ補助信号を使用
+#   anatomy_mask_source: rsna     # 提供セグ（サブセット）を参照
+
+# 学習（例示。実装は後続）
+# train:
+#   losses:
+#     - name: bce_presence
+#       weight: 1.0
+#     - name: aux_anatomy_roi_loss
+#       weight: 0.3   # ROI/マスク監督の弱教師損失
+
+# 推論（例示。実装は後続）
+# inference:
+#   nms:
+#     distance_unit: mm
+#     anatomy_mask_priority: true  # 部位マスク内候補を優先
+
+# 備考:
+# - 実装は本線に影響しないようガードし、設定が有効な場合のみ動く設計を想定。
+# - 評価は部位別の感度/適合率、mmスケールでの一致判定で効果を測定。
+

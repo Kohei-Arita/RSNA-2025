@@ -32,7 +32,7 @@
 ## 提出要件（重要）
 
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
-- 実行時間上限の目安：GPU/CPU ≈ 12時間、TPU ≈ 9時間。長時間化する処理は前計算を Dataset 化して持ち込む。
+- 実行時間上限の目安：GPU ≈ 9時間（実運用で一般的。12時間枠は切られる場合あり）、CPU ≈ 12時間、TPU ≈ 9時間。長時間化する処理は前計算を Dataset 化して持ち込む。
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
@@ -430,12 +430,12 @@ PY
 
 ### 時間ガード（推論用の自動ダウングレード指針）
 
-※ 実行中に症例あたり時間から ETA を見積もり、予算超過が見えたら 基準解像度の段階的低下 → TTA停止 → パッチストライド粗化 → 候補上限縮小 の順で自動ダウングレード（`kaggle_infer.py` 内）。12h 内完走を最優先。
+※ 実行中に症例あたり時間から ETA を見積もり、予算超過が見えたら 基準解像度の段階的低下 → TTA停止 → パッチストライド粗化 → 候補上限縮小 の順で自動ダウングレード（`kaggle_infer.py` 内）。GPU 9h 内完走を最優先。
 
-- 概算 ETA が上限（≒12h）を超えそうな場合の優先順位
+- 概算 ETA が上限（≒9h GPU 基準）を超えそうな場合の優先順位
   - 入力解像度（短辺基準）を段階的に下げる → TTA 停止 → パッチストライドを粗く → 候補数上限を縮小
 - “完走最優先” を原則とし、ダウングレードの切替は `kaggle_infer.py` 内で実装（コメント済、後続で実装）
- - 推論高速化の実務指針（本追記）: AMP（半精度）/TorchScript/ONNX を優先適用し、適用可能な層に対して dynamic quantization（int8）を使用。自動ダウングレード（解像度→TTA→stride→候補数）と併用し 12h 制限での完走率とスループットを最大化する（詳細は `experiments/exp0007_2p5d_mainline/` を参照）。
+ - 推論高速化の実務指針（本追記）: AMP（半精度）/TorchScript/ONNX を優先適用し、適用可能な層に対して dynamic quantization（int8）を使用。自動ダウングレード（解像度→TTA→stride→候補数）と併用し 9h（GPU）制限での完走率とスループットを最大化する（詳細は `experiments/exp0007_2p5d_mainline/` を参照）。
 
 ### CSV 検証強化（軽量）
 
@@ -463,11 +463,11 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ```
 
 - Kaggle 側 GPU（P100/T4）を想定した小サンプル実測で、`kaggle/kaggle_infer.py` の自動ダウングレード閾値（TTA 停止→stride 粗化→候補数上限→解像度）を校正します。
-- 最悪条件でも 12h 内完走する設定を優先します。
+- 最悪条件でも GPU 9h 内完走する設定を優先します。
 
 ## 変更点（この改訂で追加された骨組み）
 
-- `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（Kaggle 12h 完走前提の軽量設定）
+- `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（Kaggle GPU 9h 完走前提の軽量設定）
 - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
 - `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
@@ -558,7 +558,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 
 > 最低限の案内のみ。実装詳細は後続ステップで追加予定。
 
-- 切替例（Hydra）: `paths=kaggle wandb=disabled inference=kaggle_fast`
+- 切替例（Hydra）: `paths=kaggle wandb=disabled inference=kaggle_fast`（時間ガードは GPU 9h 基準）
 - 追加ファイル（骨組み）:
   - `configs/paths/kaggle.yaml` / `configs/wandb/disabled.yaml`
   - `configs/inference/kaggle_fast.yaml`
@@ -571,7 +571,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
   - `make kaggle-prep` / `make kaggle-dryrun` / `make wheels`
 
 TODO:
-- 推論本体の第一経路（シリーズ→14ラベル確率の直行分類）を `kaggle/kaggle_infer.py` に実装
+- 推論本体の第一経路（シリーズ→14ラベル確率の直行分類）を `kaggle/kaggle_infer.py` に実装（ETA に基づく自動ダウングレードは GPU 9h 完走を第1目標）
 - 候補→パッチ分類の経路は補助/アンサンブル要員（必要に応じて併用）
 - 前計算仕様（フォーマット/項目）と `tools/pack_precompute.py` の実装
 - 検証ツール・幾何テストの具体化
@@ -608,7 +608,7 @@ TODO:
 - README に設計レビューと契約リンクを追記
  - 最小の高インパクト改善（本追記で方針のみ固定）:
    - presence 校正の徹底強化（重み13に直結）: presence ヘッドの損失を class-balanced BCE + focal（γ>0）で強化し、OOF で温度スケーリング/等分位校正を適用。方針スケルトンを `configs/train/presence_calibration.yaml` に追加し、検証実験を `experiments/exp0006_presence_calib/` に分離。モダリティ（CTA/MRA/MRI）差に対しては `configs/inference/modality_thresholds.yaml` で modality-wise threshold を CV で同定。
-   - 2.5D 主力 + 軽量3D補助 + 推論最適化: スライス CNN + RNN（LSTM/GRU）による 2.5D を presence/部位の第一主力に据え、3D は候補パッチ分類の補助に限定。推論では AMP + TorchScript/ONNX + dynamic quantization を活用し、時間ガード（解像度→TTA→stride→候補数）と併用して 12h 制限下での“速くて強い”実行を担保。方針スケルトンを `configs/model/two_point_five_d.yaml` と `experiments/exp0007_2p5d_mainline/` に追加。
+   - 2.5D 主力 + 軽量3D補助 + 推論最適化: スライス CNN + RNN（LSTM/GRU）による 2.5D を presence/部位の第一主力に据え、3D は候補パッチ分類の補助に限定。推論では AMP + TorchScript/ONNX + dynamic quantization を活用し、時間ガード（解像度→TTA→stride→候補数）と併用して 9h（GPU）制限下での“速くて強い”実行を担保。方針スケルトンを `configs/model/two_point_five_d.yaml` と `experiments/exp0007_2p5d_mainline/` に追加。
    - 公開外部の事前学習の活用（ルール順守・出所明記）: 頭部 CT/MR 近縁の公開データや自己教師あり（例: 3D MAE 系）で backbone を事前学習し、本データで微調整。学習は Colab、重み搬入は Kaggle Datasets（Private, Add data）。出所・ライセンス・再現手順は `docs/DATASET_CARD.md` に明記。検証実験は `experiments/exp0008_external_pretrain/` に分離。
 
 参考: 現時点のデフォルトは voxel 座標（`z,y,x`）と `confidence∈[0,1]`。ただし差異があれば**公式評価API仕様を常に優先**し、`docs/SUBMISSION_CONTRACT.md` を同期更新。
@@ -673,9 +673,12 @@ experiments/
 ├── exp0007_2p5d_mainline/
 │   ├── config.yaml    # コメントのみ（2.5D 主力 + 軽量3D補助 + 推論最適化）
 │   └── notes.md       # コメントのみ（AMP/TorchScript/ONNX/quantization の運用）
-└── exp0008_external_pretrain/
-    ├── config.yaml    # コメントのみ（公開外部事前学習→微調整の手順）
-    └── notes.md       # コメントのみ（ルール順守・出所/ライセンス記載）
+├── exp0008_external_pretrain/
+│   ├── config.yaml    # コメントのみ（公開外部事前学習→微調整の手順）
+│   └── notes.md       # コメントのみ（ルール順守・出所/ライセンス記載）
+└── exp0009_anatomy_aware/
+    ├── config.yaml    # コメントのみ（13部位セグ/マスク活用の補助Loss/NMS重み付け）
+    └── notes.md       # コメントのみ（設計メモとCV/ルール遵守/時間ガード方針）
 ```
 
 - **運用**: すべて Colab で学習・検証し、Kaggle では `kaggle/kaggle_infer.py` の実行に限定（Internet: Off, wheels データセット併用）。
