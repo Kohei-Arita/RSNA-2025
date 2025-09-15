@@ -10,6 +10,7 @@
 - [前提条件](#前提条件)
 - [Colab セットアップ手順（初回）](#colab-セットアップ手順初回)
 - [データ取得（Kaggle API → DVC/Drive 連携）](#データ取得kaggle-api--dvc-drive-連携)
+- [データセット運用（配置・同期・Kaggle搬入）](#データセット運用配置同期kaggle搬入)
 - [EDA（探索的データ分析）](#eda探索的データ分析)
 - [学習（Hydra/CLI + W&B ロギング）](#学習hydra-cli--wb-ロギング)
 - [推論・OOF・可視化](#推論oof可視化)
@@ -281,6 +282,86 @@ unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
 # DVC（任意）
 dvc pull
 ```
+
+## データセット運用（配置・同期・Kaggle搬入）
+
+### 方針（311GB 級の公式データ）
+- 研究（Colab/ローカル）: リポジトリ直下 `data/` をルートに、実体は DVC + Google Drive remote で管理。必要分のみ `dvc pull` で取得。
+  - `data/raw/` に公式データ、`data/interim/` に中間生成物、`data/processed/` に前処理済みを格納。
+- 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（合計≦目安20GB）で追加。
+
+### ローカル/Colab: 初回取得と同期
+- 公式データの取得（Kaggle API）
+```bash
+kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw
+unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
+```
+- DVC remote（Google Drive 等）の利用（例）
+```bash
+cp dvc.config.example dvc.config
+dvc pull  # 既存の共有データ/成果物を取得
+```
+- 新規生成物を共有に載せる場合（例）
+```bash
+dvc add data/processed
+git add data/processed.dvc data/.gitignore
+git commit -m "Add processed artifacts to DVC"
+dvc push
+```
+- 容量ガイド: 311GB は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。
+
+### Kaggle Notebooks: 搬入物と参照先
+- 参照先
+  - 公式データ: `/kaggle/input/rsna-intracranial-aneurysm-detection/`
+  - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`（合計≦目安20GB）
+- パス（Hydra の Kaggle プロファイル）
+```yaml
+# Kaggle 環境専用パス設定（/kaggle/working, /kaggle/input を前提）
+paths:
+  work_dir: /kaggle/working
+  input_dir: /kaggle/input
+  output_dir: ${paths.work_dir}/outputs
+  models_dir: ${paths.input_dir}/rsna2025-weights
+  precompute_dir: ${paths.input_dir}/rsna2025-precompute
+  preds_dir: ${paths.output_dir}/preds
+  oof_dir: ${paths.output_dir}/oof
+
+wandb:
+  enabled: false
+  mode: disabled
+```
+- 実行フロー（例）
+```bash
+# Add data で rsna2025-precompute / rsna2025-weights を追加
+python kaggle/kaggle_infer.py
+python tools/verify_submission.py /kaggle/working/submission.csv
+```
+
+### 前計算（持込フォーマットの指針）
+- 例（スケルトン、後続で仕様確定）
+  - `<case_id>/volume.npz`（等方再サンプル済, float16）
+  - `<case_id>/brain_mask.npz`
+  - `<case_id>/candidates.csv`（z,y,x,score 等の最小列）
+- ひな形生成（ローカル/Colab）
+```bash
+python tools/pack_precompute.py
+# dist/rsna2025-precompute/ と _meta.json を作成（スケルトン）
+```
+
+### 契約・検証
+- 参照: `docs/SUBMISSION_CONTRACT.md`
+  - 座標系: voxel 座標（z,y,x）
+  - スコア: confidence ∈ [0,1]
+  - 列名・dtype・NaN/Inf・重複・値域の規定を明文化
+- 軽量検証（例）
+```bash
+python tools/verify_submission.py /kaggle/working/submission.csv \
+  --id_regex '^[A-Za-z0-9_.-]+$' --deny_duplicates --check-range
+```
+
+### よくある質問
+- 311GB はどこに置く？ → 研究側の DVC remote（Google Drive 等）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
+- どのくらい持ち込める？ → 前計算+重みの合計≦目安20GB。`npz/float16` と疎表現を前提。
 
 ## EDA（Colab）
 
