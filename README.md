@@ -1,6 +1,6 @@
 # RSNA-2025 — Intracranial Aneurysm Detection（Colab-First / Kaggle Notebooks Only 対応）
 
-本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・最大実行時間≒12時間）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
+本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・実行時間上限≒9時間を基準）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
 
 ## 目次
 
@@ -32,7 +32,7 @@
 ## 提出要件（重要）
 
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
-- 実行時間上限の目安：GPU ≈ 9時間（実運用で一般的。12時間枠は切られる場合あり）、CPU ≈ 12時間、TPU ≈ 9時間。長時間化する処理は前計算を Dataset 化して持ち込む。
+- 実行時間上限の目安：GPU/TPU ≈ 9時間（本プロジェクトは“9時間基準”で設計）、CPU ≈ 12時間。長時間化する処理は前計算を Dataset 化して持ち込む。
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
@@ -339,7 +339,9 @@ dvc push
 ### Kaggle Notebooks: 搬入物と参照先（Internet: Off）
 - 参照先
   - 公式データ: `/kaggle/input/rsna-intracranial-aneurysm-detection/`
-  - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`（/kaggle/working は≒20GB制約。入力データセットは1件あたり≒200GBまで）
+  - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`
+    - `/kaggle/working` は≒20GiB 上限（永続保存領域）
+    - 入力データセットは1件あたり≒200GB上限（Add dataを分割活用）
 - パス（Hydra の Kaggle プロファイル）
 ```yaml
 # Kaggle 環境専用パス設定（/kaggle/working, /kaggle/input を前提）
@@ -387,7 +389,7 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 
 ### よくある質問
 - 311GB はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
-- どのくらい持ち込める？ → 原則は「前計算+重みの合計≦目安20GB（運用目安）」としつつ、必要に応じてデータセットを分割/圧縮して拡張可（Kaggle Datasetsの1データセット上限は現在200GB。Notebookの入力総量や /working 容量の制約は別に存在）。
+- どのくらい持ち込める？ → `/kaggle/working` は≒20GiB 上限（永続）。入力データセットは1件あたり≒200GB上限（Add dataを分割活用）。前計算+重みはこの制約内で設計。
 
 ## EDA（Colab）
 
@@ -434,12 +436,14 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
 - 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
-- `kaggle/kaggle_infer.py` を実行 → `/kaggle/working/submission.csv`
-- 軽量検証（スケルトン）: `tools/verify_submission.py`
+- まず `kaggle/kaggle_infer.py` でシリーズ→14ラベル確率を生成（ローカル検証用CSV）
+- 本提出は Gateway 仕様に従う: `kaggle/rsna_gateway_client.py` で RSNA Gateway へ提出（コメント: デモNotebookのI/Fに準拠）
+- CSV 検証は乾式/回帰用に `tools/verify_submission.py` を利用（Gateway 仕様が真実源）
 
 ```bash
 # Kaggle 環境（概念図）
-python kaggle/kaggle_infer.py  # 実装後、submission.csv を生成
+python kaggle/kaggle_infer.py            # ローカル検証用CSVを生成
+python kaggle/rsna_gateway_client.py     # Gateway 仕様に従い本提出（I/F準拠）
 ```
 
 ### オフラインpip（wheel / Add data）
@@ -494,7 +498,7 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ## 変更点（この改訂で追加された骨組み）
 
 - `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（Kaggle GPU 9h 完走前提の軽量設定）
-- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
+- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, rsna_gateway_client.py, notebook_template.ipynb, offline_requirements.txt）
 - `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
 - `Makefile` の kaggle タスク（prep/dryrun/wheels）
@@ -589,7 +593,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 - 追加ファイル（骨組み）:
   - `configs/paths/kaggle.yaml` / `configs/wandb/disabled.yaml`
   - `configs/inference/kaggle_fast.yaml`
-  - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
+  - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, rsna_gateway_client.py, notebook_template.ipynb, offline_requirements.txt）
   - `tools/pack_precompute.py`（前計算梱包・スケルトン）
   - `tools/verify_submission.py`（提出検証・スケルトン：`series_id` + 14 ラベル確率の検証を想定）
   - `tests/test_dicom_geometry.py`（幾何テスト・後続で実装）

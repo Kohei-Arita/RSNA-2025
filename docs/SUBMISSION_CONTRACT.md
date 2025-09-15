@@ -2,6 +2,8 @@
 
 この文書は Kaggle 提出用 CSV の最小仕様（列名・dtype・座標系・単位・値域）を定義します。検証は `tools/verify_submission.py` で行い、本ドキュメントのルールに準拠します。
 
+> 注記（重要）: 本提出の真実源は RSNA Gateway の提出仕様です。Notebookの本提出は Gateway インターフェースに準拠して実施し、CSV は乾式検証・回帰テスト用の補助手段とします（`kaggle/rsna_gateway_client.py`）。
+
 ### 目的
 - 提出フォーマットの早期固定により、推論処理と検証処理を安定化する
 - チーム内・Notebook環境での解釈齟齬を防ぎ、オフライン提出を堅牢化する
