@@ -267,7 +267,7 @@ DVC 公式の手順に沿って gdrive 連携を使えます（dvc_gdrive が必
 ## フロー概観（Colab=研究 / Kaggle=提出）
 
 - 研究（Colab）: データ取得→EDA→学習→評価（W&B可）
-- 提出（Kaggle）: 前計算/重みの Dataset を追加→最小推論→CSV 提出（オフライン）
+- 提出（Kaggle）: 前計算/重みの Dataset を追加→シリーズ単位の14ラベル確率を推論→CSV 提出（オフライン）
 - 切替（例）: `paths=colab` / `paths=kaggle wandb=disabled inference=kaggle_fast`
 
 ## データ取得（Colab）
@@ -349,9 +349,9 @@ python tools/pack_precompute.py
 ```
 
 ### 契約・検証
-- 真実源: 本コンペの**公式評価API仕様**に完全追従する（Overview/Rules/評価実装の期待形式）。
+- 真実源: 本コンペの**公式評価API仕様**に完全追従（Overview/Rules/評価実装の期待形式）。
+  - 提出フォーマット: `series_id` と 14 ラベル列（例: `aneurysm_present` + 13 部位ラベル）に対する確率 [0,1]。
   - `docs/SUBMISSION_CONTRACT.md` は評価API仕様と常に同期（差異があれば必ず更新）。
-  - 既定値（暫定）: voxel 座標（z,y,x）、confidence ∈ [0,1]。ただし公式仕様と異なる場合は公式を優先。
   - 列名・dtype・NaN/Inf・重複・値域を評価APIに沿って定義。
 - 軽量検証（例）
 ```bash
@@ -361,7 +361,7 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 
 ### よくある質問
 - 311GB はどこに置く？ → 研究側の DVC remote（Google Drive 等）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
-- どのくらい持ち込める？ → 前計算+重みの合計≦目安20GB。`npz/float16` と疎表現を前提。
+- どのくらい持ち込める？ → 原則は「前計算+重みの合計≦目安20GB（運用目安）」としつつ、必要に応じてデータセットを分割/圧縮して拡張可（Kaggle Datasetsの1データセット上限は現在200GB。Notebookの入力総量や /working 容量の制約は別に存在）。
 
 ## EDA（Colab）
 
@@ -382,7 +382,7 @@ python -m rsna_aneurysm.cli train \
 ## 推論・評価（Colab）
 
 - OOF/可視化は既存ノート/スクリプトを利用
-- 提出用推論は Kaggle 側に最小化して分離
+- 提出用推論は Kaggle 側に最小化して分離（シリーズ→14ラベル確率を第一経路に、ローカライゼーションは可視化/特徴補助）
 
 ```bash
 python -m rsna_aneurysm.cli infer \
@@ -404,10 +404,10 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 
 ### Notebook設定
 - 「Edit » Notebook settings」等から Internet: Off を選択し、保存してから実行する。
-  - Notebook-only 競技では明示的にインターネット無効が求められる場合があります。
+  - Notebook-only 競技ではインターネット無効や外部データ可否がルールで定義。詳細はコンペの Code 要件パネル/FAQ を参照。
 
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
-- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加
+- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
 - `kaggle/kaggle_infer.py` を実行 → `/kaggle/working/submission.csv`
 - 軽量検証（スケルトン）: `tools/verify_submission.py`
 
@@ -430,10 +430,10 @@ PY
 
 ### 時間ガード（推論用の自動ダウングレード指針）
 
-※ 実行中に症例あたり時間から ETA を見積もり、予算超過が見えたら TTA停止 → パッチストライド粗化 → 候補上限縮小 の順で自動ダウングレード（`kaggle_infer.py` 内）。12h 内完走を最優先。
+※ 実行中に症例あたり時間から ETA を見積もり、予算超過が見えたら 基準解像度の段階的低下 → TTA停止 → パッチストライド粗化 → 候補上限縮小 の順で自動ダウングレード（`kaggle_infer.py` 内）。12h 内完走を最優先。
 
-- 概算 ETA が上限（≒12h）を超えそうな場合に優先順位で無効化/粗化
-  - TTA 停止 → パッチストライドを粗く → 候補数上限を縮小 → 入力解像度を縮小
+- 概算 ETA が上限（≒12h）を超えそうな場合の優先順位
+  - 入力解像度（短辺基準）を段階的に下げる → TTA 停止 → パッチストライドを粗く → 候補数上限を縮小
 - “完走最優先” を原則とし、ダウングレードの切替は `kaggle_infer.py` 内で実装（コメント済、後続で実装）
 
 ### CSV 検証強化（軽量）
@@ -443,18 +443,17 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
   --id_regex '^[A-Za-z0-9_.-]+$' --deny_duplicates --check-range
 ```
 
-- 列名・dtype・NaN/Inf を検査
-- スコア/座標の値域・ID 形式・重複行を検出
+- 列名（`series_id` と 14 ラベル）が揃っているか、dtype、NaN/Inf を検査
+- 確率の値域 [0,1]、ID 形式、重複行を検出
 - 仕様確定後に `tools/verify_submission.py` 内コメントへ反映（実装は後続）
 
 ### 提出契約（必ず固定）
 
-- 真実源は本コンペの**公式評価API仕様**。Overview/Rules/評価実装で定義された出力フォーマット・座標系・閾値・距離判定に完全追従。
+- 真実源は本コンペの**公式評価API仕様**。Overview/Rules/評価実装で定義された出力フォーマットに完全追従。
+  - 提出は `series_id` と 14 ラベル（`aneurysm_present` + 13 部位ラベル）の確率 [0,1]。
   - 列名・dtype・NaN/Inf・重複・値域は評価APIの期待に合わせる。
-  - 座標系・単位やスコア範囲は評価APIに従う（暫定の README 記述より公式を優先）。
-  - 位置一致判定（距離/半径/NMS 半径）も評価実装の定義を採用。
 - 反映先：`docs/SUBMISSION_CONTRACT.md`（同期された要約）と `configs/inference/kaggle_fast.yaml` に同一仕様を反映。
-- `tools/verify_submission.py` は評価APIの期待形式を直接検証できるようにテンプレ上で合わせ込み（実装は後続）。
+- `tools/verify_submission.py` は上記の期待形式を直接検証できるようにテンプレ上で合わせ込み（実装は後続）。
 
 ## ローカル乾式リハーサル
 
@@ -564,13 +563,14 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
   - `configs/inference/kaggle_fast.yaml`
   - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
   - `tools/pack_precompute.py`（前計算梱包・スケルトン）
-  - `tools/verify_submission.py`（提出検証・スケルトン）
+  - `tools/verify_submission.py`（提出検証・スケルトン：`series_id` + 14 ラベル確率の検証を想定）
   - `tests/test_dicom_geometry.py`（幾何テスト・後続で実装）
 - Make タスク:
   - `make kaggle-prep` / `make kaggle-dryrun` / `make wheels`
 
 TODO:
-- 推論本体（パッチ推論・NMS・CSV出力）を `kaggle/kaggle_infer.py` に実装
+- 推論本体の第一経路（シリーズ→14ラベル確率の直行分類）を `kaggle/kaggle_infer.py` に実装
+- 候補→パッチ分類の経路は補助/アンサンブル要員（必要に応じて併用）
 - 前計算仕様（フォーマット/項目）と `tools/pack_precompute.py` の実装
 - 検証ツール・幾何テストの具体化
 
@@ -584,6 +584,7 @@ TODO:
 ### リスクと埋めたい穴
 - DICOM 幾何の不整合（方位・符号・間隔/厚み・欠損）
   - `tests/test_dicom_geometry.py` の skip を最優先で解除し、等方再サンプルと座標系の統一を先に固定（失敗時は学習/推論を停止する運用）。
+  - 運用冗長化: 学習アーティファクトの真実源を Kaggle Datasets（Private）または別リモート（S3/GCS など）にも二重化して保持。
 - リーク防止と CV の一意性
   - 患者単位 split を CSV 化し、常に同じ fold を再利用（DVC / W&B artifact）
 - Kaggle 時間ガードの実装不足
