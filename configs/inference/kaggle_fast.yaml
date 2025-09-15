@@ -11,6 +11,7 @@ inference:
   score_threshold: 0.10
   nms_iou: 0.2
   max_detections: 50
+  time_budget_hours: 12  # 自動ダウングレード（解像度→TTA→stride→候補数）の逆算に使用
 
 model:
   name: baseline_3d_patch  # TODO: 実モデル名に合わせて更新

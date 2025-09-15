@@ -32,7 +32,7 @@
 ## 提出要件（重要）
 
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
-- 実行時間上限の目安：GPU/TPU ≈ 9時間（本プロジェクトは“9時間基準”で設計）、CPU ≈ 12時間。長時間化する処理は前計算を Dataset 化して持ち込む。
+- 実行時間上限の目安：CPU/GPU/TPU ≤ 12時間（Code要件）。推論は `configs/inference/kaggle_fast.yaml` の `time_budget_hours` を基準に自動ダウングレード（解像度→TTA→stride→候補数）。
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
@@ -436,14 +436,14 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
 - 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
-- まず `kaggle/kaggle_infer.py` でシリーズ→14ラベル確率を生成（ローカル検証用CSV）
-- 本提出は Gateway 仕様に従う: `kaggle/rsna_gateway_client.py` で RSNA Gateway へ提出（コメント: デモNotebookのI/Fに準拠）
-- CSV 検証は乾式/回帰用に `tools/verify_submission.py` を利用（Gateway 仕様が真実源）
+- `kaggle/kaggle_infer.py` でシリーズ→14ラベル確率を生成し、`/kaggle/working/submission.csv` を出力
+- `tools/verify_submission.py` で軽量検証後、Kaggle へ CSV を提出（CSV が提出の真実源）
 
 ```bash
 # Kaggle 環境（概念図）
-python kaggle/kaggle_infer.py            # ローカル検証用CSVを生成
-python kaggle/rsna_gateway_client.py     # Gateway 仕様に従い本提出（I/F準拠）
+python kaggle/kaggle_infer.py            # submission.csv を生成
+python tools/verify_submission.py /kaggle/working/submission.csv
+# その後、Kaggle UI/API から提出
 ```
 
 ### オフラインpip（wheel / Add data）
@@ -483,7 +483,7 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 - 真実源は本コンペの**公式評価API仕様**。Overview/Rules/評価実装で定義された出力フォーマットに完全追従。
   - 提出は `series_id` と 14 ラベル（`aneurysm_present` + 13 部位ラベル）の確率 [0,1]。
   - 列名・dtype・NaN/Inf・重複・値域は評価APIの期待に合わせる。
-- 反映先：`docs/SUBMISSION_CONTRACT.md`（同期された要約）と `configs/inference/kaggle_fast.yaml` に同一仕様を反映。
+- 反映先：`docs/SUBMISSION_CONTRACT.md`（同期された要約）と `configs/inference/kaggle_fast.yaml` に同一仕様を反映（`time_budget_hours` を含む）。
 - `tools/verify_submission.py` は上記の期待形式を直接検証できるようにテンプレ上で合わせ込み（実装は後続）。
 
 ## ローカル乾式リハーサル
@@ -498,7 +498,7 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ## 変更点（この改訂で追加された骨組み）
 
 - `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（Kaggle GPU 9h 完走前提の軽量設定）
-- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, rsna_gateway_client.py, notebook_template.ipynb, offline_requirements.txt）
+- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
 - `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
 - `Makefile` の kaggle タスク（prep/dryrun/wheels）
@@ -592,7 +592,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 - 切替例（Hydra）: `paths=kaggle wandb=disabled inference=kaggle_fast`（時間ガードは GPU 9h 基準）
 - 追加ファイル（骨組み）:
   - `configs/paths/kaggle.yaml` / `configs/wandb/disabled.yaml`
-  - `configs/inference/kaggle_fast.yaml`
+  - `configs/inference/kaggle_fast.yaml`（time_budget_hours を持つ）
   - `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, rsna_gateway_client.py, notebook_template.ipynb, offline_requirements.txt）
   - `tools/pack_precompute.py`（前計算梱包・スケルトン）
   - `tools/verify_submission.py`（提出検証・スケルトン：`series_id` + 14 ラベル確率の検証を想定）
