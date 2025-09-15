@@ -1,1 +1,13 @@
-# DVC����/��÷�-�n�������k���Wf(	
+# DVC 設定例（GCS remote 前提, コメント中心）
+#
+# 初期化とremote追加（例）:
+#   dvc init
+#   dvc remote add -d gcsremote gs://<your-gcs-bucket>/rsna2025
+#   # サービスアカウント鍵を使う場合（ファイルは追跡しない）
+#   dvc remote modify gcsremote credentialpath .gcloud/service-account.json
+#
+# 認証:
+# - Colab では ADC 推奨: from google.colab import auth; auth.authenticate_user()
+# - SA を使う場合は GOOGLE_APPLICATION_CREDENTIALS を設定
+#
+# 注意: 実鍵や機密値はコミットしないこと。

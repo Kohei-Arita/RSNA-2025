@@ -1,6 +1,6 @@
 # RSNA-2025 — Intracranial Aneurysm Detection（Colab-First / Kaggle Notebooks Only 対応）
 
-本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・最大実行時間≒12時間）の二層設計を前提とします。以降の手順・コマンドは Colab 上での利用（Drive 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を想定しています。Colab の Drive マウントや入出力の流れは Colab 公式ノートブック「Local Files, Drive, Sheets, and Cloud Storage」を基準にしています。
+本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・最大実行時間≒12時間）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
 
 ## 目次
 
@@ -9,7 +9,7 @@
 - [リポジトリ構成](#リポジトリ構成)
 - [前提条件](#前提条件)
 - [Colab セットアップ手順（初回）](#colab-セットアップ手順初回)
-- [データ取得（Kaggle API → DVC/Drive 連携）](#データ取得kaggle-api--dvc-drive-連携)
+- [データ取得（Kaggle API → DVC/GCS 連携）](#データ取得kaggle-api--dvcgcs-連携)
 - [データセット運用（配置・同期・Kaggle搬入）](#データセット運用配置同期kaggle搬入)
 - [EDA（探索的データ分析）](#eda探索的データ分析)
 - [学習（Hydra/CLI + W&B ロギング）](#学習hydra-cli--wb-ロギング)
@@ -26,7 +26,7 @@
 - **目的**：RSNA Intracranial Aneurysm Detection コンペにおける管理しやすさ最優先の実験基盤。
 - **実行**：Google Colab（GPU 推奨）。
 - **追跡**：Weights & Biases（実験ロギング、アーティファクト管理の補助）。
-- **データ／成果物**：DVC + Google Drive remote でデータ版管理、submissions/ に提出物を一元管理。
+- **データ／成果物**：DVC + GCS（Google Cloud Storage）remote でデータ版管理、submissions/ に提出物を一元管理。
 - **コンフィグ**：Hydra によるグループ分割・defaults 合成・マルチラン対応。
 
 ## 提出要件（重要）
@@ -54,6 +54,10 @@ RSNA-2025/
 │   ├── ISSUE_TEMPLATE/        # Issue テンプレート
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   └── SECURITY.md            # セキュリティポリシー
+│
+├── .gcloud/                  # GCS 認証関連（例のみ、実鍵は追跡しない）
+│   ├── service-account.example.json   # サービスアカウント鍵の例（コメントのみ）
+│   └── README.md                     # 認証手順メモ（ADC/SA, コメントのみ）
 │
 ├── configs/                   # Hydra設定ファイル群
 │   ├── config.yaml           # メイン設定・デフォルト値
@@ -153,10 +157,13 @@ RSNA-2025/
 │   └── seed_everything.py    # 再現性確保
 │
 ├── docs/                     # プロジェクト関連ドキュメント
-│   ├── colab_setup.md        # Colab環境構築詳細手順
+│   ├── README_ARCH.md        # GCS三層設計の要旨（コメント）
+│   ├── colab_setup.md        # Colab環境構築（GCS認証のコメント追記）
 │   ├── experiment_workflow.md # 実験ワークフロー解説
-│   ├── dvc_remote.md         # DVC remote設定ガイド
-│   └── DATASET_CARD.md       # データセット詳細・制約
+│   ├── dvc_remote_gcs.md     # DVC×GCS 連携手順（コメント）
+│   ├── kaggle_offline.md     # Kaggle Internet: Off 運用（コメント）
+│   ├── DATASET_CARD.md       # データセット詳細・制約
+│   └── SUBMISSION_CONTRACT.md # 提出仕様
 │
 ├── env/                      # 環境・依存関係管理
 │   ├── requirements.txt      # Colab用依存関係（配布用）
@@ -166,9 +173,30 @@ RSNA-2025/
 ├── .kaggle/                  # Kaggle API設定
 │   └── kaggle.json.example   # API認証ファイル例
 │
+├── gcs/                      # GCS固有の運用補助（コメントのみ）
+│   ├── buckets.example.yaml      # バケット構成例（コメント）
+│   ├── iam.bindings.example.yaml # ロール付与の雛形（コメント）
+│   ├── acl_preset.json           # ACL プリセット例（コメント）
+│   ├── sync_patterns.txt         # 軽量同期パターン（コメント）
+│   └── README.md                 # 補足メモ（コメント）
+│
+├── infra/                    # 任意（IaC: Terraform 等, コメントのみ）
+│   └── terraform/
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── providers.tf
+│       └── terraform.tfvars.example
+│
+├── scripts/                  # 認証/初期化スクリプト（コメントのみ）
+│   ├── colab_auth_gcs.sh
+│   ├── dvc_init_gcs.sh
+│   ├── gcsfuse_mount_colab.sh
+│   └── verify_env.py
+│
 ├── dvc.yaml                  # DVCパイプライン定義
 ├── dvc.lock                  # DVCロックファイル
-├── dvc.config.example        # DVC設定例（Google Drive）
+├── dvc.config.example        # DVC設定例（GCS remote の例, コメント）
 ├── pyproject.toml            # Python依存関係・メタデータ（真実源）
 ├── Makefile                  # 開発タスク自動化
 └── README.md                 # このファイル
@@ -191,7 +219,7 @@ RSNA-2025/
 
 ## 前提条件
 
-- Google アカウント（Colab と Drive 利用）
+- Google アカウント（Colab 利用）＋ GCP プロジェクト/権限（GCS アクセス）
 - Kaggle アカウント & Kaggle API トークン（kaggle.json）
 - Weights & Biases アカウント & API Key（wandb login）
 
@@ -199,7 +227,7 @@ RSNA-2025/
 
 ## Colab セットアップ手順（初回）
 
-この章は Colab 専用です。 Drive マウント、依存関係の導入、シークレット投入までを 1 セルずつ実施します。
+この章は Colab 専用です。 GCS 認証（ADC/サービスアカウント）、依存関係の導入、シークレット投入までを 1 セルずつ実施します。
 
 ### GPU 確認（任意）
 
@@ -207,12 +235,14 @@ RSNA-2025/
 !nvidia-smi || true
 ```
 
-### Google Drive をマウント
-Colab 公式の方法に従います。マウント後は `/content/drive/MyDrive` が利用可能です。
-
+### Google Cloud 認証（ADC 推奨 / SA でも可）
 ```python
-from google.colab import drive
-drive.mount('/content/drive')
+from google.colab import auth
+auth.authenticate_user()  # ADC を有効化（対話許可）
+```
+（コメント）サービスアカウント鍵を使う場合の例：
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/content/RSNA-2025/.gcloud/service-account.json"
 ```
 
 ### リポジトリを取得（例：あなたの GitHub にミラー済みの想定）
@@ -250,19 +280,15 @@ Kaggle ドキュメントに従い kaggle.json を配置（Colab では ~/.kaggl
 !kaggle --version
 ```
 
-### DVC + Google Drive remote 準備（任意・推奨）
-DVC 公式の手順に沿って gdrive 連携を使えます（dvc_gdrive が必要）。初回は OAuth 認可が入る場合があります。
-
+### DVC + GCS remote 準備（推奨）
+（コメント）DVC 公式手順に準拠。リモートは gs:// をデフォルトに設定します。
 ```bash
-!pip install "dvc[gdrive]"
-# 例：サンプルの dvc.config をベースにユーザ環境用を作成
-!cp dvc.config.example dvc.config
-# 初回 pull（リモート URL は dvc.config で指す）
+!pip install "dvc[gcs]"
+!dvc init
+!dvc remote add -d gcsremote gs://<your-gcs-bucket>/rsna2025
+!dvc remote modify gcsremote credentialpath .gcloud/service-account.json  # SA 使用時の例
 !dvc pull
 ```
-
-💡 DVC の Google Drive 認可でブロック表示が出るケースがある旨は公式に注記があります（ワークアラウンドあり）。困った場合は該当ページを参照してください。
-※ Google Drive 連携で "This app is blocked" 表示が出る既知事象あり。DVC 公式のワークアラウンドを参照。
 
 ## フロー概観（Colab=研究 / Kaggle=提出）
 
@@ -270,7 +296,7 @@ DVC 公式の手順に沿って gdrive 連携を使えます（dvc_gdrive が必
 - 提出（Kaggle）: 前計算/重みの Dataset を追加→シリーズ単位の14ラベル確率を推論→CSV 提出（オフライン）
 - 切替（例）: `paths=colab` / `paths=kaggle wandb=disabled inference=kaggle_fast`
 
-## データ取得（Colab）
+## データ取得（Kaggle API → DVC/GCS 連携）
 
 - Kaggle API で公式データ取得（既存手順）
 - DVC remote（任意）でチーム共有
@@ -286,7 +312,7 @@ dvc pull
 ## データセット運用（配置・同期・Kaggle搬入）
 
 ### 方針（311GB 級の公式データ）
-- 研究（Colab/ローカル）: リポジトリ直下 `data/` をルートに、実体は DVC + Google Drive remote で管理。必要分のみ `dvc pull` で取得。
+- 研究（Colab/ローカル）: リポジトリ直下 `data/` をルートに、実体は DVC + GCS remote で管理。必要分のみ `dvc pull` で取得。
   - `data/raw/` に公式データ、`data/interim/` に中間生成物、`data/processed/` に前処理済みを格納。
 - 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（合計≦目安20GB）で追加。
 
@@ -296,10 +322,10 @@ dvc pull
 kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw
 unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
 ```
-- DVC remote（Google Drive 等）の利用（例）
+- DVC remote（GCS）の利用（例）
 ```bash
 cp dvc.config.example dvc.config
-dvc pull  # 既存の共有データ/成果物を取得
+dvc pull  # 既存の共有データ/成果物を取得（gs:// を参照）
 ```
 - 新規生成物を共有に載せる場合（例）
 ```bash
@@ -310,10 +336,10 @@ dvc push
 ```
 - 容量ガイド: 311GB は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。
 
-### Kaggle Notebooks: 搬入物と参照先
+### Kaggle Notebooks: 搬入物と参照先（Internet: Off）
 - 参照先
   - 公式データ: `/kaggle/input/rsna-intracranial-aneurysm-detection/`
-  - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`（合計≦目安20GB）
+  - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`（/kaggle/working は≒20GB制約。入力データセットは1件あたり≒200GBまで）
 - パス（Hydra の Kaggle プロファイル）
 ```yaml
 # Kaggle 環境専用パス設定（/kaggle/working, /kaggle/input を前提）
@@ -360,7 +386,7 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 ```
 
 ### よくある質問
-- 311GB はどこに置く？ → 研究側の DVC remote（Google Drive 等）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
+- 311GB はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
 - どのくらい持ち込める？ → 原則は「前計算+重みの合計≦目安20GB（運用目安）」としつつ、必要に応じてデータセットを分割/圧縮して拡張可（Kaggle Datasetsの1データセット上限は現在200GB。Notebookの入力総量や /working 容量の制約は別に存在）。
 
 ## EDA（Colab）
@@ -508,9 +534,9 @@ Colab では make が無い場合があるため、使わなくても進めら�
 
 ## トラブルシュート
 
-- **Drive マウントがうまくいかない**：Colab 公式の I/O ノートブックの手順を再確認。権限ダイアログの再実行で解消することが多いです。
+- **GCS 認証がうまくいかない**：Colab で `from google.colab import auth; auth.authenticate_user()` を実行。サービスアカウント使用時は `GOOGLE_APPLICATION_CREDENTIALS` を設定し、鍵は追跡しない。
 - **Kaggle API で 401/403**：~/.kaggle/kaggle.json の配置と chmod 600（権限）を確認。Kaggle 設定ページから再発行も有効です。
-- **DVC × Google Drive で認可エラー／ブロック表示**：DVC 公式の gdrive remote ページにワークアラウンド記載あり。dvc remote modify の各種フラグ（gdrive_acknowledge_abuse, サービスアカウント使用 など）も検討。
+- **DVC × GCS での権限エラー**：`dvc remote modify gcsremote credentialpath .gcloud/service-account.json` を確認。バケット IAM/ロールを点検（Storage Object Admin など最小権限）。
 - **Hydra のマルチランで組合せを制御したい**：hydra-filter-sweeper や List Sweeper で探索空間を制限可能。
 
 ## ライセンス
@@ -549,7 +575,8 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 - [Kaggle API（Public API / GitHub README）](https://github.com/Kaggle/kaggle-api)
 - [Kaggle Notebooks（Internet: Off / Add data の考え方）](https://www.kaggle.com/docs/notebooks)
 - [W&B Quickstart / wandb login（公式Docs）](https://docs.wandb.ai/quickstart)
-- [DVC × Google Drive（remote 設定 / 既知の注意）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-drive)
+- [DVC × GCS（remote 設定）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-cloud-storage)
+- [Google Cloud 認証（ADC / サービスアカウント）](https://cloud.google.com/docs/authentication)
 - [Hydra 基本のオーバライド構文（Basic Override）](https://hydra.cc/docs/advanced/override_grammar/basic/)
 - [Hydra マルチラン（Multi-run / Sweeper）](https://hydra.cc/docs/advanced/multi-run/)
 - Kaggle Datasets（サイズ上限の目安と運用注意）
