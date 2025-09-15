@@ -474,3 +474,30 @@ TODO:
 - 推論本体（パッチ推論・NMS・CSV出力）を `kaggle/kaggle_infer.py` に実装
 - 前計算仕様（フォーマット/項目）と `tools/pack_precompute.py` の実装
 - 検証ツール・幾何テストの具体化
+
+## 設計レビュー（強み・改善アクション）
+
+### よかった点（強み）
+- Colab=ロギング＆可視化／Kaggle=最小限推論の二層設計が明快（`paths=kaggle wandb=disabled` で切替一貫）
+- 再現性に強い構成（`experiments/expXXXX/config.yaml` をスナップショット、`pyproject.toml` を真実源）
+- 提出のオフライン最適化（wheels Dataset、時間ガード、検証スクリプト）で“完走最優先”の思想
+
+### リスクと埋めたい穴
+- DICOM 幾何の不整合（方位・符号・間隔/厚み・欠損）
+  - `tests/test_dicom_geometry.py` の skip を解除し、等方再サンプルと座標系の統一を先に固定
+- リーク防止と CV の一意性
+  - 患者単位 split を CSV 化し、常に同じ fold を再利用（DVC / W&B artifact）
+- Kaggle 時間ガードの実装不足
+  - ETA 推定＋段階的ダウングレード（TTA→stride→候補N→解像度→2.5D）を自動切替
+- 提出 CSV 仕様の早期固定
+  - 列名・dtype・座標系・単位・スコア範囲の契約を `tools/verify_submission.py` と `docs/SUBMISSION_CONTRACT.md` に集約
+- オフライン依存の脆さ
+  - `offline_requirements.txt` + wheels で `--no-index` が通ることをローカル乾式/CIで検証
+
+### すぐ効く改善（この改訂で追加/更新）
+- 提出契約ドキュメント: `docs/SUBMISSION_CONTRACT.md` を追加（検証ルールの真実源）
+- Precompute スキーマの明文化: `docs/DATASET_CARD.md` に追記
+- CV 分割の固定化: サンプル `data/processed/cv_fold_assign.example.csv` を追加
+- README に設計レビューと契約リンクを追記
+
+参考: 提出契約は voxel 座標（`z,y,x`）とし、`confidence∈[0,1]`。詳細は `docs/SUBMISSION_CONTRACT.md` を参照。
