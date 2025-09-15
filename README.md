@@ -349,10 +349,10 @@ python tools/pack_precompute.py
 ```
 
 ### 契約・検証
-- 参照: `docs/SUBMISSION_CONTRACT.md`
-  - 座標系: voxel 座標（z,y,x）
-  - スコア: confidence ∈ [0,1]
-  - 列名・dtype・NaN/Inf・重複・値域の規定を明文化
+- 真実源: 本コンペの**公式評価API仕様**に完全追従する（Overview/Rules/評価実装の期待形式）。
+  - `docs/SUBMISSION_CONTRACT.md` は評価API仕様と常に同期（差異があれば必ず更新）。
+  - 既定値（暫定）: voxel 座標（z,y,x）、confidence ∈ [0,1]。ただし公式仕様と異なる場合は公式を優先。
+  - 列名・dtype・NaN/Inf・重複・値域を評価APIに沿って定義。
 - 軽量検証（例）
 ```bash
 python tools/verify_submission.py /kaggle/working/submission.csv \
@@ -449,12 +449,12 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 
 ### 提出契約（必ず固定）
 
-- 評価/出力仕様を公式の Overview/Rules で先に確定し、次を契約します。
-  - 列名・dtype・NaN/Inf・重複・値域の規定
-  - 座標系と単位：voxel 座標（`z,y,x`）を前提
-  - スコア範囲：`confidence ∈ [0,1]`
-  - 位置一致判定：距離/半径許容（および NMS 半径）の定義
-- 反映先：`configs/inference/kaggle_fast.yaml` と `tools/verify_submission.py` に同一仕様を反映。真実源は `docs/SUBMISSION_CONTRACT.md`。
+- 真実源は本コンペの**公式評価API仕様**。Overview/Rules/評価実装で定義された出力フォーマット・座標系・閾値・距離判定に完全追従。
+  - 列名・dtype・NaN/Inf・重複・値域は評価APIの期待に合わせる。
+  - 座標系・単位やスコア範囲は評価APIに従う（暫定の README 記述より公式を優先）。
+  - 位置一致判定（距離/半径/NMS 半径）も評価実装の定義を採用。
+- 反映先：`docs/SUBMISSION_CONTRACT.md`（同期された要約）と `configs/inference/kaggle_fast.yaml` に同一仕様を反映。
+- `tools/verify_submission.py` は評価APIの期待形式を直接検証できるようにテンプレ上で合わせ込み（実装は後続）。
 
 ## ローカル乾式リハーサル
 
@@ -479,7 +479,8 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 
 - kaggle_infer: 候補点ロード→3Dパッチ切り出し→モデル推論→NMS→CSV
 - pack_precompute: 再サンプル/脳マスク/候補点の形式確定→梱包
-- verify_submission: 列名/dtype/NaN・Inf/重複/値域の軽量検証
+- verify_submission: 列名/dtype/NaN・Inf/重複/値域の軽量検証（公式評価APIの期待形式に直接照合）
+- dicom_geometry: `tests/test_dicom_geometry.py` の skip を最優先で解除し、CI/ローカル前提チェックとして実行（失敗時は学習/推論を停止する運用）。
 
 ## 実験管理ポリシー
 
@@ -582,7 +583,7 @@ TODO:
 
 ### リスクと埋めたい穴
 - DICOM 幾何の不整合（方位・符号・間隔/厚み・欠損）
-  - `tests/test_dicom_geometry.py` の skip を解除し、等方再サンプルと座標系の統一を先に固定
+  - `tests/test_dicom_geometry.py` の skip を最優先で解除し、等方再サンプルと座標系の統一を先に固定（失敗時は学習/推論を停止する運用）。
 - リーク防止と CV の一意性
   - 患者単位 split を CSV 化し、常に同じ fold を再利用（DVC / W&B artifact）
 - Kaggle 時間ガードの実装不足
@@ -603,7 +604,7 @@ TODO:
 - CV 分割の固定化: サンプル `data/processed/cv_fold_assign.example.csv` を追加
 - README に設計レビューと契約リンクを追記
 
-参考: 提出契約は voxel 座標（`z,y,x`）とし、`confidence∈[0,1]`。詳細は `docs/SUBMISSION_CONTRACT.md` を参照。
+参考: 現時点のデフォルトは voxel 座標（`z,y,x`）と `confidence∈[0,1]`。ただし差異があれば**公式評価API仕様を常に優先**し、`docs/SUBMISSION_CONTRACT.md` を同期更新。
 
 ## この改訂での“最小追加”（実装はせずコメント方針のみ固定）
 
@@ -622,6 +623,14 @@ TODO:
   - NMS 半径および一致判定を mm 単位で固定（PixelSpacing/SliceThickness 由来）。
   - `tools/verify_submission.py` に voxel⇄mm の往復検証（コメント）を追加予定。
   - 真実源は `docs/SUBMISSION_CONTRACT.md` に記載し、`configs/inference/kaggle_fast.yaml` と整合。
+
+- **モダリティ別前処理の明文化（コメントのみ）**:
+  - `src/rsna_aneurysm/transforms.py` に CTA/MRA/MRI 等モダリティ別の窓設定・強度正規化・等方リサンプルの方針をコメントで1段落追記（実装は後続）。
+  - 目的: 候補検出（3D U-Net/CenterNet）→パッチ分類（3D/2.5D）間での前処理揺れを抑制。
+  - コメント例（コードは書かない）：
+    - CTA: 軟部/骨抑制ウィンドウの選択基準、HU→標準化の範囲、1.0mm 等方 resample を基本。
+    - MRA/MRI: シーケンス別（TOF/T1/T2 等）の強度正規化方法、bias field 補正の適用可否、等方 resample の補間種別。
+    - 共通: voxel→mm の換算を transforms 内に統一実装（方針のみ記述）。
 
 ### 追加された実験ディレクトリ（コメントのみのスケルトン）
 
