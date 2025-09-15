@@ -194,6 +194,8 @@ RSNA-2025/
 - Kaggle アカウント & Kaggle API トークン（kaggle.json）
 - Weights & Biases アカウント & API Key（wandb login）
 
+※ 外部データ・事前学習重みの利用可否は各大会の Rules が最優先です。使用する場合は出所・ライセンス・再現手順を `docs/DATASET_CARD.md` に一度だけ明記してください（本 README からも参照）。
+
 ## Colab セットアップ手順（初回）
 
 この章は Colab 専用です。 Drive マウント、依存関係の導入、シークレット投入までを 1 セルずつ実施します。
@@ -364,11 +366,23 @@ python tools/verify_submission.py /kaggle/working/submission.csv \
 - スコア/座標の値域・ID 形式・重複行を検出
 - 仕様確定後に `tools/verify_submission.py` 内コメントへ反映（実装は後続）
 
+### 提出契約（必ず固定）
+
+- 評価/出力仕様を公式の Overview/Rules で先に確定し、次を契約します。
+  - 列名・dtype・NaN/Inf・重複・値域の規定
+  - 座標系と単位：voxel 座標（`z,y,x`）を前提
+  - スコア範囲：`confidence ∈ [0,1]`
+  - 位置一致判定：距離/半径許容（および NMS 半径）の定義
+- 反映先：`configs/inference/kaggle_fast.yaml` と `tools/verify_submission.py` に同一仕様を反映。真実源は `docs/SUBMISSION_CONTRACT.md`。
+
 ## ローカル乾式リハーサル
 
 ```bash
 make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ```
+
+- Kaggle 側 GPU（P100/T4）を想定した小サンプル実測で、`kaggle/kaggle_infer.py` の自動ダウングレード閾値（TTA 停止→stride 粗化→候補数上限→解像度）を校正します。
+- 最悪条件でも 12h 内完走する設定を優先します。
 
 ## 変更点（この改訂で追加された骨組み）
 
@@ -377,6 +391,8 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 - `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
 - `Makefile` の kaggle タスク（prep/dryrun/wheels）
+- tests/test_inference.py：候補→パッチ→NMS→CSV の最小経路を検証
+- Kaggle Dataset 合計≦20GB を前提に、前計算は `npz/float16`、候補は疎表現で圧縮（重みも必要最小限に絞る）
 
 ## 次ステップ（実装方針だけ明記）
 
@@ -454,6 +470,7 @@ kaggle competitions submit -c rsna-intracranial-aneurysm-detection -f submission
 - [DVC × Google Drive（remote 設定 / 既知の注意）](https://dvc.org/doc/user-guide/data-management/remote-storage/google-drive)
 - [Hydra 基本のオーバライド構文（Basic Override）](https://hydra.cc/docs/advanced/override_grammar/basic/)
 - [Hydra マルチラン（Multi-run / Sweeper）](https://hydra.cc/docs/advanced/multi-run/)
+- Kaggle Datasets（サイズ上限の目安と運用注意）
 
 ## Kaggle Notebooks Only 対応（研究=Colab / 提出=Kaggle の二層設計）
 
@@ -493,6 +510,11 @@ TODO:
   - 列名・dtype・座標系・単位・スコア範囲の契約を `tools/verify_submission.py` と `docs/SUBMISSION_CONTRACT.md` に集約
 - オフライン依存の脆さ
   - `offline_requirements.txt` + wheels で `--no-index` が通ることをローカル乾式/CIで検証
+
+- Kaggle Dataset サイズ上限の遵守（目安≒20GB）
+  - 前計算は `npz/float16`、メタは parquet、重みは必要最小構成に絞る
+- 外部データ・事前学習の可否と記載の徹底
+  - Rules 準拠を徹底し、使用時は出所とライセンスを `docs/DATASET_CARD.md` に明記
 
 ### すぐ効く改善（この改訂で追加/更新）
 - 提出契約ドキュメント: `docs/SUBMISSION_CONTRACT.md` を追加（検証ルールの真実源）
