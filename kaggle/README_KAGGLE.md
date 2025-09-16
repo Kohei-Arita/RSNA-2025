@@ -4,13 +4,14 @@
 
 ## 流れ（概要）
 - 事前計算・重みを Dataset 化して追加（"Add data"）
+  - 重み（weights）は Public な Kaggle Dataset として公開し、提出Notebookのバージョンにリンク（必須）
 - 必要最小限の依存解決（標準イメージ優先）
 - `kaggle_infer.py` を実行して `submission.csv` を生成
 - 軽量検証を行い、そのまま Submit
 
 ## 事前準備（ローカル/Colab）
 - `tools/pack_precompute.py` で前計算成果物を梱包（TODO: 実装）
-- 学習済み重みを収集して Dataset 化
+- 学習済み重みを収集して Dataset 化（Public 必須）
  - 追加依存が必要な場合は wheel を収集して Dataset 化（例: `rsna2025-wheels`）
 
 ## ノートブック

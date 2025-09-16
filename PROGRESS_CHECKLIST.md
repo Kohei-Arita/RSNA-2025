@@ -60,6 +60,8 @@
 - [ ] 時間管理と簡易化: 制限時間（既定9h）を超えないよう、ETAを監視し「解像度縮小→TTA停止→ストライド粗化→候補数削減」の順でダウングレード。AMP（半精度）・TorchScript/ONNX・動的量子化で高速化。
 - [ ] 提出の最終確認: Notebookは「Internet: Off」。必須ライブラリは`kaggle/offline_requirements.txt`からwheelを使用。`make kaggle-dryrun`等でローカルDry-run（形式チェック）を実行し、問題なければ「Save Version」→提出（CSV提出は不要・例外なし、Serving API のみ）。
 
+- [ ] 学習済み重みをPublic Dataset化: `rsna2025-weights` を Kaggle で Public とし、提出Notebookのバージョンとリンク（URL/IDを本チェックリストに記載）。
+
 - [ ] SUBMISSION_CONTRACT に従い、14 ラベルの正式名と配列順を固定（コード・検証双方が同一の真実源を参照）。
 - [ ] `serve()` は起動直後に先呼びし、重い初期化は Lazy Load/ウォームアップで吸収（評価APIの15分要件を厳守）。
 - [ ] テストはランダム順で約 2,500 シリーズ（目安）を想定し、ETA と自動ダウングレードの閾値を設計。

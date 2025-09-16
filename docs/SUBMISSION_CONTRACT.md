@@ -2,7 +2,7 @@
 
 この文書は Kaggle 提出用 CSV の最小仕様（列名・dtype・座標系・単位・値域）を定義します。検証は `tools/verify_submission.py` で行い、本ドキュメントのルールに準拠します。
 
-> 注記（重要）: 本提出の真実源は Kaggle の CSV 提出です。Notebookでは `kaggle/kaggle_infer.py` で `submission.csv` を生成し、`tools/verify_submission.py` による乾式検証後、Kaggle へ提出します。
+> 注記（重要）: 本提出の真実源は Kaggle の CSV 提出です。Notebookでは `kaggle/kaggle_infer.py` で `submission.csv` を生成し、`tools/verify_submission.py` による乾式検証後、Kaggle へ提出します。提出に使用する学習済み重み（weights）は Kaggle Dataset として "Public" で公開し、提出コード（Notebook/Script）のバージョンにリンクさせることを必須要件とします（ルール準拠）。
 
 ### 目的
 - 提出フォーマットの早期固定により、推論処理と検証処理を安定化する

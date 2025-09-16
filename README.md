@@ -455,7 +455,7 @@ python -m rsna_aneurysm.cli infer \
 
 - 前計算を梱包（スケルトン）: `make kaggle-prep`
 - 学習済み重みを `dist/rsna2025-weights/` に集約（手動/スクリプト）
-- それぞれ Kaggle Dataset として登録（Private で可）
+- それぞれ Kaggle Dataset として登録（重みは Public 必須。提出Notebookのバージョンにリンク）
 
 ```bash
 make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
@@ -470,7 +470,7 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
   - Notebook-only 競技ではインターネット無効や外部データ可否がルールで定義。詳細はコンペの Code 要件パネル/FAQ を参照。
 
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
-- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
+- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（重みは Public Dataset 必須。依存wheelも必要なら `rsna2025-wheels` を追加）
 - `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
 
 - **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]
@@ -658,7 +658,7 @@ TODO:
 ### リスクと埋めたい穴
 - DICOM 幾何の不整合（方位・符号・間隔/厚み・欠損）
   - `tests/test_dicom_geometry.py` の skip を最優先で解除し、等方再サンプルと座標系の統一を先に固定（失敗時は学習/推論を停止する運用）。
-  - 運用冗長化: 学習アーティファクトの真実源を Kaggle Datasets（Private）または別リモート（S3/GCS など）にも二重化して保持。
+  - 運用冗長化: 学習アーティファクトの真実源を Kaggle Datasets（Public）または別リモート（S3/GCS など）にも二重化して保持（提出に使用する重みは Public 必須）。
 - リーク防止と CV の一意性
   - 患者単位 split を CSV 化し、常に同じ fold を再利用（DVC / W&B artifact）
 - Kaggle 時間ガードの実装不足
@@ -681,7 +681,8 @@ TODO:
  - 最小の高インパクト改善（本追記で方針のみ固定）:
    - presence 校正の徹底強化（重み13に直結）: presence ヘッドの損失を class-balanced BCE + focal（γ>0）で強化し、OOF で温度スケーリング/等分位校正を適用。方針スケルトンを `configs/train/presence_calibration.yaml` に追加し、検証実験を `experiments/exp0006_presence_calib/` に分離。モダリティ（CTA/MRA/MRI）差に対しては `configs/inference/modality_thresholds.yaml` で modality-wise threshold を CV で同定。
    - 2.5D 主力 + 軽量3D補助 + 推論最適化: スライス CNN + RNN（LSTM/GRU）による 2.5D を presence/部位の第一主力に据え、3D は候補パッチ分類の補助に限定。推論では AMP + TorchScript/ONNX + dynamic quantization を活用し、時間ガード（解像度→TTA→stride→候補数）と併用して `time_budget_hours` 制限下での“速くて強い”実行を担保。方針スケルトンを `configs/model/two_point_five_d.yaml` と `experiments/exp0007_2p5d_mainline/` に追加。
-   - 公開外部の事前学習の活用（ルール順守・出所明記）: 頭部 CT/MR 近縁の公開データや自己教師あり（例: 3D MAE 系）で backbone を事前学習し、本データで微調整。学習は Colab、重み搬入は Kaggle Datasets（Private, Add data）。出所・ライセンス・再現手順は `docs/DATASET_CARD.md` に明記。検証実験は `experiments/exp0008_external_pretrain/` に分離。
+   - 公開外部の事前学習の活用（ルール順守・出所明記）: 頭部 CT/MR 近縁の公開データや自己教師あり（例: 3D MAE 系）で backbone を事前学習し、本データで微調整。学習は Colab、重み搬入は Kaggle Datasets（Public, Add data）。出所・ライセンス・再現手順は `docs/DATASET_CARD.md` に明記。検証実験は `experiments/exp0008_external_pretrain/` に分離。
+   - 公開外部の事前学習の活用（ルール順守・出所明記）: 頭部 CT/MR 近縁の公開データや自己教師あり（例: 3D MAE 系）で backbone を事前学習し、本データで微調整。学習は Colab、重み搬入は Kaggle Datasets（Public, Add data）。出所・ライセンス・再現手順は `docs/DATASET_CARD.md` に明記。検証実験は `experiments/exp0008_external_pretrain/` に分離。
 
 参考: 現時点のデフォルトは voxel 座標（`z,y,x`）と `confidence∈[0,1]`。ただし差異があれば**公式評価API仕様を常に優先**し、`docs/SUBMISSION_CONTRACT.md` を同期更新。
 
