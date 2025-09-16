@@ -1,5 +1,12 @@
 # RSNA-2025 — Intracranial Aneurysm Detection（Colab-First / Kaggle Notebooks Only 対応）
 
+> ### 提出前チェック（TL;DR）
+> - [ ] Notebook を **Internet: Off** で保存・実行した  
+> - [ ] 起動から **15分以内に `serve()`** を呼んで待受した  
+> - [ ] **14ラベル**（`aneurysm_present` + 13部位）の確率を返す実装  
+> - [ ] `time_budget_hours` 内完走：自動ダウングレード（解像度→TTA→stride→候補N）有効  
+> - [ ] 仕様の真実源は **`docs/SUBMISSION_CONTRACT.md`**（READMEは要約のみ）
+
 本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（Internet: Off／実行時間上限の公式値: CPU/GPU ≤ 12時間, TPU ≤ 9時間。設計上は安全側で9時間以内完走を目標）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
 
 ## 目次
@@ -27,7 +34,7 @@
 - **目的**：RSNA Intracranial Aneurysm Detection コンペにおける管理しやすさ最優先の実験基盤。
 - **実行**：Google Colab（GPU 推奨）。
 - **追跡**：Weights & Biases（実験ロギング、アーティファクト管理の補助）。
-- **データ／成果物**：DVC + GCS（Google Cloud Storage）remote でデータ版管理、submissions/ に提出物を一元管理。
+- **データ／成果物**：DVC + GCS（Google Cloud Storage）remote で**データのバージョン管理**、`submissions/` に提出物を一元管理。
 - **コンフィグ**：Hydra によるグループ分割・defaults 合成・マルチラン対応。
 
 ## 提出要件（重要）
@@ -49,9 +56,9 @@
 ## 評価指標（公式）
 
 - 指標：14個の AUC の加重平均（Kaggle 表記: weighted average of the fourteen AUC scores）
-- 具体式: score = (13·AUC_presence + Σ AUC_parts) / 26（parts は13ラベル）［出典: [Overview/Evaluation](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/overview/evaluation)］
+- 具体式: `score = (13 * AUC(aneurysm_present) + Σ AUC(part_i)) / 26`（parts は13ラベル）［出典: [Overview/Evaluation](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/overview/evaluation)］
 - 重み：`aneurysm_present` に 13、各部位ラベルに 1（合計 26）。用語ゆれを避けるため、本READMEでは上記の式で固定して表記。
-- 実務上の示唆：presence の寄与が大きいため、presence ヘッドの損失・校正を重視（例：`configs/train/presence_calibration.yaml`、温度スケーリング等）。
+- 実務上の示唆：aneurysm_present（presence）の寄与が大きいため、aneurysm_present ヘッドの損失・校正を重視（例：`configs/train/presence_calibration.yaml`、温度スケーリング等）。
 
 - リーダーボード：公開LBは約32%で算出、最終LBは残り約68%で再計算（過学習に注意）。
 
@@ -351,7 +358,7 @@ dvc pull
 #### 局所化データ（train_localizers.csv）の活用
 
 - 公式配布の `train_localizers.csv` は動脈瘤の座標・位置情報を含む。3D 候補検出の教師や、候補パッチ分類（3D/2.5D）での正例サンプリングに活用可能。
-- 運用案：Colab 側で localizers を取り込み、`tools/pack_precompute.py` で `<case_id>/candidates.csv`（z,y,x,score 等）として梱包→Kaggle に Add data。評価・NMS は mm スケールで行い、`docs/SUBMISSION_CONTRACT.md` と整合させる。
+- 運用案：Colab 側で localizers を取り込み、`tools/pack_precompute.py` で `<series_id>/candidates.csv`（z,y,x,score 等）として梱包→Kaggle に Add data。評価・NMS は mm スケールで行い、`docs/SUBMISSION_CONTRACT.md` と整合させる。
 
 - 注意：一部シリーズで localizer 欠落の更新がフォーラムで告知されている。missing を許容し、localizers が無くても presence/部位分類が動作する実装とする。
 
@@ -360,7 +367,7 @@ dvc pull
 ```bash
 kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw
 unzip -q data/raw/rsna-intracranial-aneurysm-detection.zip -d data/raw
-```
+
 - DVC remote（GCS）の利用（例）
 ```bash
 cp dvc.config.example dvc.config
@@ -405,9 +412,9 @@ python kaggle/kaggle_infer.py --serve
 
 ### 前計算（持込フォーマットの指針）
 - 例（スケルトン、後続で仕様確定）
-  - `<case_id>/volume.npz`（等方再サンプル済, float16）
-  - `<case_id>/brain_mask.npz`
-  - `<case_id>/candidates.csv`（z,y,x,score 等の最小列）
+  - `<series_id>/volume.npz`（等方再サンプル済, float16）
+  - `<series_id>/brain_mask.npz`
+  - `<series_id>/candidates.csv`（z,y,x,score 等の最小列）
 - ひな形生成（ローカル/Colab）
 ```bash
 python tools/pack_precompute.py
