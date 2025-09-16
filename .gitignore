@@ -21,7 +21,7 @@ submissions/*
 !submissions/.gitkeep
 
 # Kaggle
-.kaggle/kaggle.json
+.kaggle/
 
 # Python
 __pycache__/
