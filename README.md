@@ -37,14 +37,15 @@
 
 本READMEは、当該コンペがサービングAPIを前提とする Notebooks Only 形式であることを前提に記述しています。時間上限は公式値（CPU/GPU ≤ 12時間、TPU ≤ 9時間）を主としつつ、設計目標は安全側で9時間以内完走とします。
 
-- 本番提出は評価APIのみ（シリーズ単位に14確率を返答）。CSV 提出は不要で、CSV はローカルDry-run専用ツール（`tools/verify_submission.py`）のみで使用する。
+- 本番提出は評価APIのみ（シリーズ単位に14確率を返答）。CSV 提出は不要（例外なし）で、CSV はローカルDry-run専用ツール（`tools/verify_submission.py`）のみで使用する。［参照: [Code タブ](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/code)／デモノート］
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
 ## 評価指標（公式）
 
-- 指標：Mean Weighted Columnwise AUCROC（列ごとの AUC を重み付き平均）
-- 重み：`aneurysm_present` に 13、各部位ラベルに 1（合計 26）。README 上では「重み付きAUC」と表現しつつ、実際の重み比 13:1 を明記して混乱を避ける。
+- 指標：14個の AUC の加重平均（Kaggle 表記: weighted average of the fourteen AUC scores）
+- 具体式: score = (13·AUC_presence + Σ AUC_parts) / 26（parts は13ラベル）［出典: [Overview/Evaluation](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/overview/evaluation)］
+- 重み：`aneurysm_present` に 13、各部位ラベルに 1（合計 26）。用語ゆれを避けるため、本READMEでは上記の式で固定して表記。
 - 実務上の示唆：presence の寄与が大きいため、presence ヘッドの損失・校正を重視（例：`configs/train/presence_calibration.yaml`、温度スケーリング等）。
 
 ## リポジトリ構成
@@ -247,7 +248,7 @@ RSNA-2025/
 - Kaggle アカウント & Kaggle API トークン（kaggle.json）
 - Weights & Biases アカウント & API Key（wandb login）
 
-※ 外部データ・事前学習重みの利用可否は各大会の Rules が最優先です。使用する場合は出所・ライセンス・再現手順を `docs/DATASET_CARD.md` に一度だけ明記してください（本 README からも参照）。
+※ 外部データ・事前学習重みの利用可否は各大会の Rules が最優先です。一般に「公開・自由に入手可能」な外部データ／公開 pre-trained モデルは利用可（要出所・ライセンス・再現手順の明記）です。使用する場合は `docs/DATASET_CARD.md` に一度だけ明記してください（本 README からも参照）。［出典: [Rules](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/rules)］
 
 ## Colab セットアップ手順（初回）
 
@@ -462,7 +463,7 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 - 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
 - `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
 
-- **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）
+- **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]
 
 ```bash
 # Kaggle 環境（概念図）
@@ -507,6 +508,7 @@ python tools/verify_submission.py .work/submission.csv \
 - 真実源は本コンペの**公式評価API仕様**。Overview/Rules/評価実装で定義されたAPIに完全追従。
   - サーバはシリーズIDごとに 14 ラベル（`aneurysm_present` + 13 部位ラベル）の確率 [0,1] を応答する。
   - スキーマ（キー名・dtype・NaN/Inf 取り扱い・値域）は評価APIの期待に合わせる。
+  - サーバ初期化および `serve()` 呼び出しはノートブック起動から15分以内に必須［参照: [Code タブ](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/code)／デモノート］。
 - 反映先：`docs/SUBMISSION_CONTRACT.md`（API契約の同期要約）と `configs/inference/kaggle_fast.yaml` に同一仕様を反映（`time_budget_hours` を含む）。
 - `tools/verify_submission.py` はローカルDry-run（CSV雛形）のみで利用し、Kaggle 本番では使用しない。
 
@@ -516,7 +518,7 @@ python tools/verify_submission.py .work/submission.csv \
 make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ```
 
-- Kaggle 側 GPU（P100/T4）を想定した小サンプル実測で、`kaggle/kaggle_infer.py` の自動ダウングレード閾値（TTA 停止→stride 粗化→候補数上限→解像度）を校正します。
+- Notebook の Accelerator 設定（例: T4/P100 等）に依存した小サンプル実測で、`kaggle/kaggle_infer.py` の自動ダウングレード閾値（TTA 停止→stride 粗化→候補数上限→解像度）を校正します。
 - 最悪条件でも `time_budget_hours` 内完走する設定を優先します。
 - 本手順はローカルDry-run用（CSV雛形）であり、Kaggle 本番ではサービングAPIのみを使用します。
 
@@ -607,6 +609,8 @@ python -m rsna_aneurysm.cli infer inference=base model=baseline_2d paths=colab c
 - [Hydra 基本のオーバライド構文（Basic Override）](https://hydra.cc/docs/advanced/override_grammar/basic/)
 - [Hydra マルチラン（Multi-run / Sweeper）](https://hydra.cc/docs/advanced/multi-run/)
 - Kaggle Datasets（サイズ上限の目安と運用注意）
+
+[^serve15]: Kaggle Notebooks Only 競技では、ノートブック起動から15分以内にサーバ初期化を完了し `serve()` を呼び出す必要があります。詳細は当該コンペの [Code タブ](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/code) に掲載のデモノートブックを参照してください。
 
 ## Kaggle Notebooks Only 対応（研究=Colab / 提出=Kaggle の二層設計）
 

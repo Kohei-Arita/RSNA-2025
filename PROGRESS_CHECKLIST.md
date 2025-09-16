@@ -48,13 +48,13 @@
 
 ### 推論・Kaggle提出準備
 
-- [ ] OOF予測と評価: CVのOOF予測を作成し、各ラベルのROC/AUCを算出。重み付きColumnAUCは**(AUC_presence*13 + sum(AUC_parts)*1) / (13+13)**で評価。
+- [ ] OOF予測と評価: CVのOOF予測を作成し、各ラベルのROC/AUCを算出。スコアは score = (13·AUC_presence + Σ AUC_parts) / 26 で評価（parts は13ラベル）。
 - [ ] 出力フォーマット確認: 提出はサービングAPI形式。シリーズIDごとに14要素（`aneurysm_present` + 13ラベル）の確率を返す。予測が[0,1]範囲で重複行がないことを`tools/verify_submission.py`で検証。
 - [ ] 前処理データのパッケージ化: スケルトン（等方化ボリューム、脳マスク、候補座標）を`tools/pack_precompute.py`で生成し、`dist/rsna2025-precompute/`へ。
 - [ ] モデル重みの準備: 学習済み重み（各Fold/アンサンブル）を`dist/rsna2025-weights/`にまとめ、サイズ制限内に整理。`kaggle/kaggle_utils.py`でロード可能に管理。
 - [ ] Kaggle推論スクリプト: `kaggle/kaggle_infer.py`をサービングとして使用。Notebook内で`python kaggle/kaggle_infer.py --serve`を実行し、起動後15分以内に初期化完了→必ず`serve()`を呼び出して待機（評価API要件）。
 - [ ] 時間管理と簡易化: 制限時間（既定9h）を超えないよう、ETAを監視し「解像度縮小→TTA停止→ストライド粗化→候補数削減」の順でダウングレード。AMP（半精度）・TorchScript/ONNX・動的量子化で高速化。
-- [ ] 提出の最終確認: Notebookは「Internet: Off」。必須ライブラリは`kaggle/offline_requirements.txt`からwheelを使用。`make kaggle-dryrun`等でローカルDry-run（形式チェック）を実行し、問題なければ「Save Version」→提出。
+- [ ] 提出の最終確認: Notebookは「Internet: Off」。必須ライブラリは`kaggle/offline_requirements.txt`からwheelを使用。`make kaggle-dryrun`等でローカルDry-run（形式チェック）を実行し、問題なければ「Save Version」→提出（CSV提出は不要・例外なし、Serving API のみ）。
 
 ### 実験管理・共有
 
