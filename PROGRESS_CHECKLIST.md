@@ -19,6 +19,8 @@
 - [ ] 依存環境構築: リポジトリをクローンし、`pip install -r env/requirements.txt`でPythonライブラリをインストール。PyTorch/TensorFlow等のバージョン確認、必要に応じてGPU(T4/P100)やTPUを有効化。
 - [ ] コードレポ・実験管理: `src/rsna_aneurysm/cli.py`に倣い、`experiments/`以下に実験ディレクトリを作成・管理。各実験で`config.yaml`にHydra設定を固定し、Notebookで再現可能に。
 
+- [ ] Kaggle Notebook のアクセラレータ確認：Code タブの Notebook settings で選択肢を確認。GPU/CPU を基本とし、TPU は“要確認”（提出環境に依存）。
+
 ### データ取得と管理
 
 - [ ] 公式データの取得（Kaggle API）: `kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw`でダウンロード・解凍。総容量は数百GB規模（参考）。最新サイズはKaggleのDataタブを確認。Colab単独は厳しいため、ローカル/大容量ストレージで取得・分割し、必要分のみGCSへ格納を検討。
@@ -28,6 +30,8 @@
 - [ ] 前処理データの管理: 等方化npz、脳マスク、候補座標などを`data/processed/`に生成し、DVCで管理。`tools/pack_precompute.py`で生成フォルダを整える。完成した前処理データは`dvc push`でGCSへ。
 - [ ] Kaggle Notebook用データセット: Notebook Only提出に備え、前処理データと学習済み重みをKaggle Dataset化。`dist/rsna2025-precompute/`と`dist/rsna2025-weights/`に集約。各Dataset上限は200GB（公式Docs準拠）だが、`/kaggle/working` は20GiB（永続）かつ一時領域にも制約があるため、`npz/float16`や疎フォーマットで圧縮・分割を推奨。
 - [ ] Kaggleへのデータ追加: 公式データは`/kaggle/input/rsna-intracranial-aneurysm-detection/`で参照可能。自作データセット（`rsna2025-precompute`, `rsna2025-weights`）はNotebook右上「+ Add data」で追加。
+
+- [ ] localizers 欠落の許容：一部シリーズで localizer が欠落する可能性に備え、missing 許容・presence/部位分類はフォールバックで動作することを確認。
 
 ### 探索的データ分析（EDA）
 
@@ -56,12 +60,19 @@
 - [ ] 時間管理と簡易化: 制限時間（既定9h）を超えないよう、ETAを監視し「解像度縮小→TTA停止→ストライド粗化→候補数削減」の順でダウングレード。AMP（半精度）・TorchScript/ONNX・動的量子化で高速化。
 - [ ] 提出の最終確認: Notebookは「Internet: Off」。必須ライブラリは`kaggle/offline_requirements.txt`からwheelを使用。`make kaggle-dryrun`等でローカルDry-run（形式チェック）を実行し、問題なければ「Save Version」→提出（CSV提出は不要・例外なし、Serving API のみ）。
 
+- [ ] SUBMISSION_CONTRACT に従い、14 ラベルの正式名と配列順を固定（コード・検証双方が同一の真実源を参照）。
+- [ ] `serve()` は起動直後に先呼びし、重い初期化は Lazy Load/ウォームアップで吸収（評価APIの15分要件を厳守）。
+- [ ] テストはランダム順で約 2,500 シリーズ（目安）を想定し、ETA と自動ダウングレードの閾値を設計。
+- [ ] CSV は Dry-run 専用（本番は Serving API）。テンプレの「submission.csv」表記に惑わされないようチーム内で明文化。
+
 ### 実験管理・共有
 
 - [ ] 実験ディレクトリ管理: `experiments/expXXXX_name/`に`config.yaml`・学習/評価/推論Notebook・`notes.md`を集約。重要ハイパラは`config.yaml`で固定。
 - [ ] 成果物の整理: 再生成可能な成果物（モデル重み、予測、キャッシュ）は`outputs/`へ。共有資料・図表は`reports/figures/`へ。DVCで共有できるデータはリモートへPushし、必要に応じてW&B Artifactsでもバックアップ。
 - [ ] コード品質・テスト: `tests/`のユニット/統合テストを整備。前処理、DICOM読み込み、推論パイプラインにテストを用意し、CIで自動検証。特に`tests/test_dicom_geometry.py`は最優先で動作確認し、失敗時は学習/推論を停止する運用。
 - [ ] ルール遵守・ドキュメント: 外部データや事前学習モデルの利用は`docs/DATASET_CARD.md`に出所・ライセンス・再現手順を明記。提出契約仕様（シリーズID順、14列、0-1範囲）は`docs/SUBMISSION_CONTRACT.md`に従い、`tools/verify_submission.py`と整合。
+
+- [ ] LB 運用の注意：公開LBは約32%、最終LBは残り約68%で再計算。過学習に注意し、CV/OOF を優先判断に。
 
 ## 現在の進捗（最新が上）
 

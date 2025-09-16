@@ -35,6 +35,8 @@
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
 - 実行時間上限の目安：CPU/GPU ≤ 12時間、TPU ≤ 9時間（Code要件）。推論は `configs/inference/kaggle_fast.yaml` の `time_budget_hours` を基準に自動ダウングレード（解像度→TTA→stride→候補数）。
 
+- アクセラレータ選択は各コンペの Code タブ（Notebook settings）の選択肢に従う。TPU が使えるかは提出環境に依存し、サービング系では GPU/CPU 前提のことが多い。TPU の可用性は“要確認”。
+
 本READMEは、当該コンペがサービングAPIを前提とする Notebooks Only 形式であることを前提に記述しています。時間上限は公式値（CPU/GPU ≤ 12時間、TPU ≤ 9時間）を主としつつ、設計目標は安全側で9時間以内完走とします。
 
 - 本番提出は評価APIのみ（シリーズ単位に14確率を返答）。CSV 提出は不要（例外なし）で、CSV はローカルDry-run専用ツール（`tools/verify_submission.py`）のみで使用する。［参照: [Code タブ](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/code)／デモノート］
@@ -47,6 +49,8 @@
 - 具体式: score = (13·AUC_presence + Σ AUC_parts) / 26（parts は13ラベル）［出典: [Overview/Evaluation](https://www.kaggle.com/competitions/rsna-intracranial-aneurysm-detection/overview/evaluation)］
 - 重み：`aneurysm_present` に 13、各部位ラベルに 1（合計 26）。用語ゆれを避けるため、本READMEでは上記の式で固定して表記。
 - 実務上の示唆：presence の寄与が大きいため、presence ヘッドの損失・校正を重視（例：`configs/train/presence_calibration.yaml`、温度スケーリング等）。
+
+- リーダーボード：公開LBは約32%で算出、最終LBは残り約68%で再計算（過学習に注意）。
 
 ## リポジトリ構成
 
@@ -346,6 +350,8 @@ dvc pull
 - 公式配布の `train_localizers.csv` は動脈瘤の座標・位置情報を含む。3D 候補検出の教師や、候補パッチ分類（3D/2.5D）での正例サンプリングに活用可能。
 - 運用案：Colab 側で localizers を取り込み、`tools/pack_precompute.py` で `<case_id>/candidates.csv`（z,y,x,score 等）として梱包→Kaggle に Add data。評価・NMS は mm スケールで行い、`docs/SUBMISSION_CONTRACT.md` と整合させる。
 
+- 注意：一部シリーズで localizer 欠落の更新がフォーラムで告知されている。missing を許容し、localizers が無くても presence/部位分類が動作する実装とする。
+
 ### ローカル/Colab: 初回取得と同期
 - 公式データの取得（Kaggle API）
 ```bash
@@ -412,6 +418,8 @@ python tools/pack_precompute.py
   - ローカルDry-runでは CSV 雛形を `tools/verify_submission.py` で検証（本番は未使用）。
   - 列名とラベル順序は公式定義に一致させる。列順の真実源は `docs/SUBMISSION_CONTRACT.md`（`series_id` と 14 ラベルの順序を固定）。
 
+- 14 ラベルの正式名称と固定の配列順テーブルは `docs/SUBMISSION_CONTRACT.md` に掲載（ここを真実源としてコード・検証の双方から参照）。
+
 ### よくある質問
 - データ総量は数百GB規模（参考）。どこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。最新サイズは Kaggle のDataタブを確認。
 - どのくらい持ち込める？ → `/kaggle/working` は≒20GiB 上限（永続）。入力データセットは1件あたり上限200GB（公式Docs準拠）。ただし一時領域や実行時間の制約が実運用のボトルネックになりやすいので、前計算+重みは圧縮・分割設計を推奨。
@@ -455,6 +463,8 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 
 ## 提出（サービングAPI / Notebook-Only）
 
+- 本コンペは Serving API 方式。`submission.csv` 等の表記はテンプレートに見られるが、本番提出では不要。CSV はローカルDry-run専用（デモノートは Code タブ参照）。
+
 ### Notebook設定
 - 「Edit » Notebook settings」等から Internet: Off を選択し、保存してから実行する。
   - Notebook-only 競技ではインターネット無効や外部データ可否がルールで定義。詳細はコンペの Code 要件パネル/FAQ を参照。
@@ -464,6 +474,8 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 - `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
 
 - **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]
+
+- 実装指針：起動直後に先に `serve()` を呼ぶ。重い初期化はハンドラ内で Lazy Load（初回リクエストでロード）またはウォームアップで吸収する。
 
 ```bash
 # Kaggle 環境（概念図）
@@ -491,6 +503,8 @@ PY
   - 入力解像度（短辺基準）を段階的に下げる → TTA 停止 → パッチストライドを粗く → 候補数上限を縮小
 - “完走最優先” を原則とし、ダウングレードの切替は `kaggle_infer.py` 内で実装（コメント済、後続で実装）
  - 推論高速化の実務指針（本追記）: AMP（半精度）/TorchScript/ONNX を優先適用し、適用可能な層に対して dynamic quantization（int8）を使用。自動ダウングレード（解像度→TTA→stride→候補数）と併用し `time_budget_hours` 制限での完走率とスループットを最大化する（詳細は `experiments/exp0007_2p5d_mainline/` を参照）。
+
+- 参考：テスト配信はランダム順で約 2,500 シリーズ（目安）。ETA 設計ではこの規模とランダム順を前提に余裕を見込む。
 
 ### Dry-run 検証（CSV雛形・ローカル専用）
 
