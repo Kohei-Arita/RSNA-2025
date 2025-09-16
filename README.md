@@ -20,6 +20,8 @@
 - [トラブルシュート](#トラブルシュート)
 - [ライセンス](#ライセンス)
 
+> 運用メモ: 進捗・計画に更新があれば、必ずリポジトリ直下の `PROGRESS_CHECKLIST.md` を更新してください（最新エントリを先頭に追記）。
+
 ## プロジェクト概要
 
 - **目的**：RSNA Intracranial Aneurysm Detection コンペにおける管理しやすさ最優先の実験基盤。
@@ -33,7 +35,15 @@
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
 - 実行時間上限の目安：CPU/GPU ≤ 12時間、TPU ≤ 9時間（Code要件）。推論は `configs/inference/kaggle_fast.yaml` の `time_budget_hours` を基準に自動ダウングレード（解像度→TTA→stride→候補数）。
 
+- 本番提出は評価APIのみ（シリーズ単位に14確率を返答）。CSV 提出は不要で、CSV はローカルDry-run専用ツール（`tools/verify_submission.py`）のみで使用する。
+
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
+
+## 評価指標（公式）
+
+- 指標：Mean Weighted Columnwise AUCROC（列ごとの AUC を重み付き平均）
+- 重み：`aneurysm_present` に 13、各部位ラベルに 1（合計 26）。README 上では「重み付きAUC」と表現しつつ、実際の重み比 13:1 を明記して混乱を避ける。
+- 実務上の示唆：presence の寄与が大きいため、presence ヘッドの損失・校正を重視（例：`configs/train/presence_calibration.yaml`、温度スケーリング等）。
 
 ## リポジトリ構成
 
@@ -314,6 +324,11 @@ dvc pull
   - `data/raw/` に公式データ、`data/interim/` に中間生成物、`data/processed/` に前処理済みを格納。
 - 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（合計≦目安20GB）で追加。
 
+#### 局所化データ（train_localizers.csv）の活用
+
+- 公式配布の `train_localizers.csv` は動脈瘤の座標・位置情報を含む。3D 候補検出の教師や、候補パッチ分類（3D/2.5D）での正例サンプリングに活用可能。
+- 運用案：Colab 側で localizers を取り込み、`tools/pack_precompute.py` で `<case_id>/candidates.csv`（z,y,x,score 等）として梱包→Kaggle に Add data。評価・NMS は mm スケールで行い、`docs/SUBMISSION_CONTRACT.md` と整合させる。
+
 ### ローカル/Colab: 初回取得と同期
 - 公式データの取得（Kaggle API）
 ```bash
@@ -378,6 +393,7 @@ python tools/pack_precompute.py
   - サーバ応答はシリーズIDごとの 14 ラベル確率 [0,1]（`aneurysm_present` + 13 部位ラベル）。
   - `docs/SUBMISSION_CONTRACT.md` は評価API仕様と常に同期（差異があれば必ず更新）。
   - ローカルDry-runでは CSV 雛形を `tools/verify_submission.py` で検証（本番は未使用）。
+  - 列名とラベル順序は公式定義に一致させる。列順の真実源は `docs/SUBMISSION_CONTRACT.md`（`series_id` と 14 ラベルの順序を固定）。
 
 ### よくある質問
 - 311GB はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
