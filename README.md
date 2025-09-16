@@ -43,6 +43,9 @@
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
 
+> [!IMPORTANT]
+> ノートブック起動から15分以内に初期化を完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]。
+
 ## 評価指標（公式）
 
 - 指標：14個の AUC の加重平均（Kaggle 表記: weighted average of the fourteen AUC scores）
@@ -455,7 +458,7 @@ python -m rsna_aneurysm.cli infer \
 
 - 前計算を梱包（スケルトン）: `make kaggle-prep`
 - 学習済み重みを `dist/rsna2025-weights/` に集約（手動/スクリプト）
-- それぞれ Kaggle Dataset として登録（重みは Public 必須。提出Notebookのバージョンにリンク）
+- それぞれ Kaggle Dataset として登録（重み Dataset は Public を推奨［再現性のため］。ただし Kaggle 提出の一般要件として Public が必須という根拠はない。大会の個別ルールで指定がある場合はそれに従う。提出Notebookのバージョンにリンク）
 
 ```bash
 make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
@@ -470,7 +473,7 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
   - Notebook-only 競技ではインターネット無効や外部データ可否がルールで定義。詳細はコンペの Code 要件パネル/FAQ を参照。
 
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
-- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（重みは Public Dataset 必須。依存wheelも必要なら `rsna2025-wheels` を追加）
+- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（重み Dataset は Public を推奨［再現性のため］。依存wheelも必要なら `rsna2025-wheels` を追加）
 - `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
 
 - **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]
@@ -658,7 +661,7 @@ TODO:
 ### リスクと埋めたい穴
 - DICOM 幾何の不整合（方位・符号・間隔/厚み・欠損）
   - `tests/test_dicom_geometry.py` の skip を最優先で解除し、等方再サンプルと座標系の統一を先に固定（失敗時は学習/推論を停止する運用）。
-  - 運用冗長化: 学習アーティファクトの真実源を Kaggle Datasets（Public）または別リモート（S3/GCS など）にも二重化して保持（提出に使用する重みは Public 必須）。
+  - 運用冗長化: 学習アーティファクトの真実源を Kaggle Datasets（Public）または別リモート（S3/GCS など）にも二重化して保持（提出に使用する重みは Public 推奨［再現性/共有のため］。一般要件として必須ではないが、大会の個別ルールで指定があれば従う）。
 - リーク防止と CV の一意性
   - 患者単位 split を CSV 化し、常に同じ fold を再利用（DVC / W&B artifact）
 - Kaggle 時間ガードの実装不足
