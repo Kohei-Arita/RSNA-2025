@@ -1,6 +1,6 @@
 # RSNA-2025 — Intracranial Aneurysm Detection（Colab-First / Kaggle Notebooks Only 対応）
 
-本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（インターネット遮断・実行時間上限≒9時間を基準）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
+本プロジェクトは研究=Google Colab、提出=Kaggle Notebooks Only（Internet: Off／実行時間上限の公式値: CPU/GPU ≤ 12時間, TPU ≤ 9時間。設計上は安全側で9時間以内完走を目標）の二層設計に、Google Cloud Storage（GCS）を真実源とする三層構成（Colab=研究/学習、GCS=データ＆成果物ストア、Kaggle=オフライン提出）を採用します。以降の手順・コマンドは Colab 上での利用（GCS 連携／Kaggle API／Weights & Biases）と、Kaggle 上でのオフライン推論を前提にしています。DVC のリモートは GCS（gs://...）を前提とし、Colab からは Google Cloud の認証（ADC またはサービスアカウント）でアクセスします。
 
 ## 目次
 
@@ -35,6 +35,8 @@
 - Kaggle Notebooks Only：提出 Notebook は「Internet: Off」で保存・実行する（オンライン取得・外部通信は禁止）。
 - 実行時間上限の目安：CPU/GPU ≤ 12時間、TPU ≤ 9時間（Code要件）。推論は `configs/inference/kaggle_fast.yaml` の `time_budget_hours` を基準に自動ダウングレード（解像度→TTA→stride→候補数）。
 
+本READMEは、当該コンペがサービングAPIを前提とする Notebooks Only 形式であることを前提に記述しています。時間上限は公式値（CPU/GPU ≤ 12時間、TPU ≤ 9時間）を主としつつ、設計目標は安全側で9時間以内完走とします。
+
 - 本番提出は評価APIのみ（シリーズ単位に14確率を返答）。CSV 提出は不要で、CSV はローカルDry-run専用ツール（`tools/verify_submission.py`）のみで使用する。
 
 （注）時間上限は運営の告知や時点の仕様で変動することがあるため目安として記載。最新情報は各コンペのルール/フォーラムを確認。
@@ -54,6 +56,8 @@
 - **reports/** : 永続共有・論文/発表用図表（最終レポート、共有用可視化、プレゼン資料など）
 
 ### ディレクトリ構成
+
+（注）以下は現時点の構成（抜粋）です。追加予定や派生物は後段の「変更点」を参照してください。
 
 ```
 RSNA-2025/
@@ -87,16 +91,22 @@ RSNA-2025/
 │   │   ├── efficientnet.yaml # EfficientNet系
 │   │   ├── convnext.yaml     # ConvNeXt系
 │   │   ├── vit.yaml          # Vision Transformer
-│   │   └── three_d_cnn.yaml  # 3D CNN（ボリューム処理）
+│   │   ├── three_d_cnn.yaml  # 3D CNN（ボリューム処理）
+│   │   └── two_point_five_d.yaml # 2.5D（スライス+時系列）
 │   ├── train/                # 学習設定
 │   │   ├── base.yaml         # 基本学習設定
 │   │   ├── fp16.yaml         # 混合精度学習
 │   │   ├── swa.yaml          # Stochastic Weight Averaging
 │   │   ├── earlystop.yaml    # Early Stopping設定
-│   │   └── tta.yaml          # Test Time Augmentation
+│   │   ├── tta.yaml          # Test Time Augmentation
+│   │   └── presence_calibration.yaml # presence 校正・しきい値関連
 │   ├── inference/            # 推論設定
 │   │   ├── base.yaml         # 基本推論設定
-│   │   └── export.yaml       # モデルエクスポート設定
+│   │   ├── export.yaml       # モデルエクスポート設定
+│   │   ├── kaggle_fast.yaml  # Kaggle向け軽量・時間ガード設定
+│   │   └── modality_thresholds.yaml # モダリティ別しきい値
+│   ├── wandb/                # ロギング設定
+│   │   └── disabled.yaml     # Kaggle向け無効化設定
 │   └── paths/                # 環境別パス設定
 │       ├── local.yaml        # ローカル環境
 │       ├── colab.yaml        # Google Colab環境
@@ -149,6 +159,12 @@ RSNA-2025/
 │
 ├── reports/                  # 永続的な成果物・共有資料
 │   └── figures/              # 論文・発表用図表
+│
+├── kaggle/                   # Kaggle サービング/ノートブック資材
+│   ├── kaggle_infer.py       # サービングAPIエントリポイント
+│   ├── kaggle_utils.py       # 付随ユーティリティ
+│   ├── notebook_template.ipynb
+│   └── offline_requirements.txt
 │
 ├── submissions/              # Kaggle提出ファイル（サービングAPI移行によりCSVはDry-run用途）
 │
@@ -319,7 +335,7 @@ dvc pull
 
 ## データセット運用（配置・同期・Kaggle搬入）
 
-### 方針（311GB 級の公式データ）
+### 方針（公式データは約311GB［参考値］）
 - 研究（Colab/ローカル）: リポジトリ直下 `data/` をルートに、実体は DVC + GCS remote で管理。必要分のみ `dvc pull` で取得。
   - `data/raw/` に公式データ、`data/interim/` に中間生成物、`data/processed/` に前処理済みを格納。
 - 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（合計≦目安20GB）で追加。
@@ -347,7 +363,7 @@ git add data/processed.dvc data/.gitignore
 git commit -m "Add processed artifacts to DVC"
 dvc push
 ```
-- 容量ガイド: 311GB は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。
+- 容量ガイド: 約311GB（参考値）は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。サイズは将来変動しうるため、真実源はコンペの Kaggle ページを参照。
 
 ### Kaggle Notebooks: 搬入物と参照先（Internet: Off）
 - 参照先
@@ -396,7 +412,7 @@ python tools/pack_precompute.py
   - 列名とラベル順序は公式定義に一致させる。列順の真実源は `docs/SUBMISSION_CONTRACT.md`（`series_id` と 14 ラベルの順序を固定）。
 
 ### よくある質問
-- 311GB はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。
+- 約311GB（参考値）はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。最新サイズは Kaggle ページを確認。
 - どのくらい持ち込める？ → `/kaggle/working` は≒20GiB 上限（永続）。入力データセットは1件あたり≒20GB上限（必要なら分割し複数Datasetを Add data）。前計算+重みはこの制約内で設計。
 
 ## EDA（Colab）
