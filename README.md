@@ -335,10 +335,10 @@ dvc pull
 
 ## データセット運用（配置・同期・Kaggle搬入）
 
-### 方針（公式データは約311GB［参考値］）
+### 方針（公式データは数百GB規模［参考；最新はKaggleのDataタブ参照］）
 - 研究（Colab/ローカル）: リポジトリ直下 `data/` をルートに、実体は DVC + GCS remote で管理。必要分のみ `dvc pull` で取得。
   - `data/raw/` に公式データ、`data/interim/` に中間生成物、`data/processed/` に前処理済みを格納。
-- 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（合計≦目安20GB）で追加。
+- 提出（Kaggle Notebooks Only）: 公式データは Kaggle 側 `/kaggle/input/rsna-intracranial-aneurysm-detection/` を参照。巨大データは持ち込まず、必要最小の前計算と重みのみを Add data（各Dataset上限200GB［公式Docs準拠］。ただし `/kaggle/working` は20GiB［永続］、一時領域にも制約があるため搬入は圧縮・分割を推奨）で追加。
 
 #### 局所化データ（train_localizers.csv）の活用
 
@@ -363,14 +363,14 @@ git add data/processed.dvc data/.gitignore
 git commit -m "Add processed artifacts to DVC"
 dvc push
 ```
-- 容量ガイド: 約311GB（参考値）は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。サイズは将来変動しうるため、真実源はコンペの Kaggle ページを参照。
+- 容量ガイド: 数百GB規模（参考；最新はKaggleのDataタブ参照）は remote を真実源にし、手元は必要分のみ取得。中間生成物は `npz/float16` や疎表現で圧縮。
 
 ### Kaggle Notebooks: 搬入物と参照先（Internet: Off）
 - 参照先
   - 公式データ: `/kaggle/input/rsna-intracranial-aneurysm-detection/`
   - 追加データ（Add data）: 前計算 `rsna2025-precompute`、重み `rsna2025-weights`
     - `/kaggle/working` は≒20GiB 上限（永続保存領域）
-    - 入力データセットは1件あたり≒20GB上限（必要なら分割し複数Datasetを Add data）
+    - 入力データセットは1件あたり上限200GB（公式Docs準拠）。ただし実運用では `/kaggle/working` の20GiBや一時ディスク容量がボトルネックになりやすいため、分割・圧縮を推奨
 - パス（Hydra の Kaggle プロファイル）
 ```yaml
 # Kaggle 環境専用パス設定（/kaggle/working, /kaggle/input を前提）
@@ -412,8 +412,8 @@ python tools/pack_precompute.py
   - 列名とラベル順序は公式定義に一致させる。列順の真実源は `docs/SUBMISSION_CONTRACT.md`（`series_id` と 14 ラベルの順序を固定）。
 
 ### よくある質問
-- 約311GB（参考値）はどこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。最新サイズは Kaggle ページを確認。
-- どのくらい持ち込める？ → `/kaggle/working` は≒20GiB 上限（永続）。入力データセットは1件あたり≒20GB上限（必要なら分割し複数Datasetを Add data）。前計算+重みはこの制約内で設計。
+- データ総量は数百GB規模（参考）。どこに置く？ → 研究側の DVC remote（GCS）を真実源にし、`data/raw/` を DVC 管理。Kaggle では `/kaggle/input/...` を参照し、巨大データは持ち込まない。最新サイズは Kaggle のDataタブを確認。
+- どのくらい持ち込める？ → `/kaggle/working` は≒20GiB 上限（永続）。入力データセットは1件あたり上限200GB（公式Docs準拠）。ただし一時領域や実行時間の制約が実運用のボトルネックになりやすいので、前計算+重みは圧縮・分割設計を推奨。
 
 ## EDA（Colab）
 
@@ -461,6 +461,8 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 - Notebook: `kaggle/notebook_template.ipynb` をアップロード
 - 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（依存wheelも必要なら `rsna2025-wheels` を追加）
 - `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
+
+- **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）
 
 ```bash
 # Kaggle 環境（概念図）
@@ -648,8 +650,8 @@ TODO:
 - オフライン依存の脆さ
   - `offline_requirements.txt` + wheels で `--no-index` が通ることをローカル乾式/CIで検証
 
-- Kaggle Dataset サイズ上限の遵守（目安≒20GB）
-  - 前計算は `npz/float16`、メタは parquet、重みは必要最小構成に絞る
+- Kaggle Dataset サイズ上限の遵守（各Dataset上限200GB［公式Docs準拠］）
+  - 前計算は `npz/float16`、メタは parquet、重みは必要最小構成に絞る（`/kaggle/working` の20GiB制約も考慮）
 - 外部データ・事前学習の可否と記載の徹底
   - Rules 準拠を徹底し、使用時は出所とライセンスを `docs/DATASET_CARD.md` に明記
 

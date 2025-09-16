@@ -21,12 +21,12 @@
 
 ### データ取得と管理
 
-- [ ] 公式データの取得（Kaggle API）: `kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw`でダウンロード・解凍。総容量は約311GBのため、Colab単独は厳しい。ローカル/大容量ストレージで取得・分割し、必要分のみGCSへ格納を検討。
+- [ ] 公式データの取得（Kaggle API）: `kaggle competitions download -c rsna-intracranial-aneurysm-detection -p data/raw`でダウンロード・解凍。総容量は数百GB規模（参考）。最新サイズはKaggleのDataタブを確認。Colab単独は厳しいため、ローカル/大容量ストレージで取得・分割し、必要分のみGCSへ格納を検討。
 - [ ] RSNA公式情報: 提供データはCT/MR脳画像で、13解剖学的領域の動脈瘤有無・位置のアノテーションを含む。生データはDVC+GCSでリモート管理し、Colabでは必要部分のみ`dvc pull`で取得する運用とする。
 - [ ] DVC remote設定: `dvc init`後、`dvc remote add -d gcsremote gs://<your-bucket>/rsna2025`でリモート追加。`dvc pull`で取得、`dvc push`でアップロード。`dvc add data/raw`で生データを管理下に置き、`.dvc`ファイルをコミット共有。
 - [ ] 部分取得の活用: DVCは必要ファイルのみ取得可能。Colabでは学習に必要なサブセット（例: 一部症例のみ）だけ`dvc pull`し、メモリ節約。
 - [ ] 前処理データの管理: 等方化npz、脳マスク、候補座標などを`data/processed/`に生成し、DVCで管理。`tools/pack_precompute.py`で生成フォルダを整える。完成した前処理データは`dvc push`でGCSへ。
-- [ ] Kaggle Notebook用データセット: Notebook Only提出に備え、前処理データと学習済み重みをKaggle Dataset化。`dist/rsna2025-precompute/`と`dist/rsna2025-weights/`に集約し、合計20GB以内に収まるよう`npz/float16`や疎フォーマットで圧縮。
+- [ ] Kaggle Notebook用データセット: Notebook Only提出に備え、前処理データと学習済み重みをKaggle Dataset化。`dist/rsna2025-precompute/`と`dist/rsna2025-weights/`に集約。各Dataset上限は200GB（公式Docs準拠）だが、`/kaggle/working` は20GiB（永続）かつ一時領域にも制約があるため、`npz/float16`や疎フォーマットで圧縮・分割を推奨。
 - [ ] Kaggleへのデータ追加: 公式データは`/kaggle/input/rsna-intracranial-aneurysm-detection/`で参照可能。自作データセット（`rsna2025-precompute`, `rsna2025-weights`）はNotebook右上「+ Add data」で追加。
 
 ### 探索的データ分析（EDA）
@@ -52,7 +52,7 @@
 - [ ] 出力フォーマット確認: 提出はサービングAPI形式。シリーズIDごとに14要素（`aneurysm_present` + 13ラベル）の確率を返す。予測が[0,1]範囲で重複行がないことを`tools/verify_submission.py`で検証。
 - [ ] 前処理データのパッケージ化: スケルトン（等方化ボリューム、脳マスク、候補座標）を`tools/pack_precompute.py`で生成し、`dist/rsna2025-precompute/`へ。
 - [ ] モデル重みの準備: 学習済み重み（各Fold/アンサンブル）を`dist/rsna2025-weights/`にまとめ、サイズ制限内に整理。`kaggle/kaggle_utils.py`でロード可能に管理。
-- [ ] Kaggle推論スクリプト: `kaggle/kaggle_infer.py`をサービングとして使用。Notebook内で`python kaggle/kaggle_infer.py --serve`を実行し、起動後15分以内に初期化完了→`serve()`で待機。
+- [ ] Kaggle推論スクリプト: `kaggle/kaggle_infer.py`をサービングとして使用。Notebook内で`python kaggle/kaggle_infer.py --serve`を実行し、起動後15分以内に初期化完了→必ず`serve()`を呼び出して待機（評価API要件）。
 - [ ] 時間管理と簡易化: 制限時間（既定9h）を超えないよう、ETAを監視し「解像度縮小→TTA停止→ストライド粗化→候補数削減」の順でダウングレード。AMP（半精度）・TorchScript/ONNX・動的量子化で高速化。
 - [ ] 提出の最終確認: Notebookは「Internet: Off」。必須ライブラリは`kaggle/offline_requirements.txt`からwheelを使用。`make kaggle-dryrun`等でローカルDry-run（形式チェック）を実行し、問題なければ「Save Version」→提出。
 
