@@ -1,1 +1,22 @@
-# バケット構成例（コメント）
+# GCS bucket design (example, not applied automatically)
+bucket: rsna2025-prod
+location: asia-northeast2 # Osaka
+storageClass: STANDARD
+uniformBucketLevelAccess: true  # UBLA=ON (ACLを使わない/IAM一元化)
+labels:
+  env: prod
+  team: rsna
+  purpose: dvc
+
+# Lifecycle rules (example): 未アクセスに応じて低冗長へ段階移行
+lifecycle:
+  rules:
+    - action: { type: SetStorageClass, storageClass: NEARLINE }
+      condition: { daysSinceNoncurrentTime: 30 }   # 30日
+    - action: { type: SetStorageClass, storageClass: COLDLINE }
+      condition: { daysSinceNoncurrentTime: 90 }   # 90日
+    - action: { type: SetStorageClass, storageClass: ARCHIVE }
+      condition: { daysSinceNoncurrentTime: 365 }  # 365日
+notes:
+  - "データ更新頻度が低い領域（古い中間生成物等）を想定。まずは STANDARD で運用開始し、後から適用でもOK。"
+  - "大きなモデル/中間生成物は DVC 経由で管理。"

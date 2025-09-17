@@ -19,3 +19,9 @@
   - 例外設定や IAM 付与の雛形は `gcs/*.example.yaml` を参照し、実鍵や機微情報は `.gitignore` で除外
 
 - 参照: `README.md`（Kaggle Notebooks Only 方針、時間ガード）、`docs/dvc_remote_gcs.md`（DVC×GCS 連携）、`configs/paths/*.yaml`（環境別パス）
+
+## GCS 運用の基本方針
+- UBLA（Uniform bucket-level access）を有効化し、ACL を使わず **IAM 一元管理**とする。
+- バケット/オブジェクトに **ラベル**（env/team/purpose 等）を付与し、コスト分析や棚卸しを容易にする。
+- アクセス頻度に応じて **ライフサイクル**で Standard → Nearline → Coldline → Archive に自動移行。
+- 実設定はコンソールで行い、設計は `gcs/buckets.example.yaml` に記録（変更点は PR レビュー対象）。
