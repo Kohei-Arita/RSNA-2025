@@ -14,8 +14,8 @@
 
 ### 前提条件・環境設定
 
-- [ ] Kaggleアカウント作成＆APIトークン取得: Kaggleのマイページ「Account」タブからAPIトークン（`kaggle.json`）を生成し、`~/.kaggle/kaggle.json`に配置（権限は`600`）。Kaggle CLI（`kaggle`コマンド）が動作することを確認。
-- [ ] Google Cloud/GCS準備: GCPプロジェクトを用意し、コンペ用のGCSバケット（例: `gs://<your-bucket>/rsna2025`）を作成。DVC用サービスアカウントにStorage Object Admin権限を付与。Colabでは`GOOGLE_APPLICATION_CREDENTIALS`またはADCで認証可能に。
+- [×] Kaggleアカウント作成＆APIトークン取得: Kaggleのマイページ「Account」タブからAPIトークン（`kaggle.json`）を生成し、`~/.kaggle/kaggle.json`に配置（権限は`600`）。Kaggle CLI（`kaggle`コマンド）が動作することを確認。
+ - [x] Google Cloud/GCS準備: GCPプロジェクトを用意し、コンペ用のGCSバケット（例: `gs://<your-bucket>/rsna2025`）を作成。DVC用サービスアカウントにStorage Object Admin権限を付与。Colabでは`GOOGLE_APPLICATION_CREDENTIALS`またはADCで認証可能に。（ADCで確認済み、SA鍵は未使用）
 - [ ] 依存環境構築: リポジトリをクローンし、`pip install -r env/requirements.txt`でPythonライブラリをインストール。PyTorch/TensorFlow等のバージョン確認、必要に応じてGPU(T4/P100)やTPUを有効化。
 - [ ] コードレポ・実験管理: `src/rsna_aneurysm/cli.py`に倣い、`experiments/`以下に実験ディレクトリを作成・管理。各実験で`config.yaml`にHydra設定を固定し、Notebookで再現可能に。
 
