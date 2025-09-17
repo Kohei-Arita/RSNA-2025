@@ -22,6 +22,8 @@ submissions/*
 
 # Kaggle
 .kaggle/
+kaggle.json
+
 
 # Python
 __pycache__/

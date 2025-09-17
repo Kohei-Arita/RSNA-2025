@@ -11,6 +11,14 @@ This is an RSNA Intracranial Aneurysm Detection competition project designed wit
 
 The project uses Hydra for configuration management, Weights & Biases for experiment tracking, and follows a strict separation between research and submission environments.
 
+## ⚠️ Current Implementation Status
+
+**CRITICAL**: Most Python files in `src/rsna_aneurysm/` contain only comment stubs and require implementation:
+- All core modules (dataset.py, model.py, etc.) need actual code
+- DICOM geometry tests are skipped and must be implemented first
+- Configuration files (configs/*.yaml) may be corrupted or incomplete
+- The codebase is in skeleton/planning stage, not ready for execution
+
 ## Common Commands
 
 ### Environment Setup (Google Colab)
@@ -182,15 +190,25 @@ Priority is "complete execution within time budget" over maximum accuracy.
 - All experiments must use consistent fold definitions
 
 ### Code Quality Requirements
-- All Python files currently contain only comments/stubs - implementation needed
-- DICOM geometry tests (`tests/test_dicom_geometry.py`) are critical and currently skipped
+- **Priority 1**: Implement DICOM geometry tests (`tests/test_dicom_geometry.py`) - currently skipped
+- **Priority 2**: Implement core data pipeline (dataset.py, dicom_utils.py, transforms.py)
+- **Priority 3**: Implement model architecture and training loop (model.py, loss.py)
 - Geometric consistency (spacing, orientation, intensity scaling) must be verified before training
 - Failure in geometry tests should halt training/inference operations
 
-### Submission Contract
-- Server must respond with 14-label probabilities [0,1] per series_id
-- Format: `aneurysm_present` + 13 anatomical location labels
-- Contract definition in `docs/SUBMISSION_CONTRACT.md` (must stay in sync with official API spec)
-- Local CSV validation is for dry-run only; Kaggle uses serving API
+### Competition Submission Requirements
+- **Format**: Server must respond with 14-label probabilities [0,1] per series_id
+- **Labels**: `aneurysm_present` + 13 anatomical location labels
+- **Contract**: Definition in `docs/SUBMISSION_CONTRACT.md` (note: may be outdated, needs sync with official API)
+- **Serving**: Kaggle uses serving API, not CSV submission
+- **Time Limit**: Must complete within 9-12 hours with automatic downgrading
+- **Offline**: Must work with Internet disabled using precomputed data
+
+### Development Workflow
+1. **Start with tests**: Implement and pass `test_dicom_geometry.py` first
+2. **Build data pipeline**: Implement DICOM loading and preprocessing
+3. **Add model training**: Implement PyTorch Lightning training loop
+4. **Test inference**: Verify end-to-end inference pipeline
+5. **Package for Kaggle**: Use `make kaggle-prep` to prepare submission
 
 This codebase is structured for competition reproducibility with clear separation of concerns between research and production inference environments.
