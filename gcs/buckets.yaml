@@ -1,0 +1,8 @@
+# GCS バケット定義（本番）
+# UBLA = Uniform Bucket-Level Access（バケット単位の一元権限制御）
+buckets:
+  - name: rsna2025-prod
+    location: asia-northeast2  # Osaka
+    uniform_bucket_level_access: true  # UBLA=on
+
+

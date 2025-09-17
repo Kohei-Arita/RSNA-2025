@@ -25,6 +25,36 @@ submissions/*
 kaggle.json
 
 
+# Google Cloud / GCS (credentials & configs)
+# Ignore real credentials under .gcloud but keep examples/docs
+.gcloud/*
+!.gcloud/README.md
+!.gcloud/service-account.example.json
+
+# Common secret key patterns (service accounts / private keys)
+*.key.json
+*service-account*.json
+*serviceaccount*.json
+*credentials*.json
+application_default_credentials.json
+*.pem
+*.p12
+*.pfx
+
+# gsutil/boto config
+.boto
+*.boto
+
+# Terraform (often used with GCS backend)
+.terraform/
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.auto.tfvars
+.terraform.lock.hcl
+
+
 # Python
 __pycache__/
 *.py[cod]

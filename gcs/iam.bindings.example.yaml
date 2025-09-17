@@ -1,1 +1,2 @@
 # ロール付与の雛形（コメント）
+# 対象バケット単位で roles/storage.objectAdmin を付与

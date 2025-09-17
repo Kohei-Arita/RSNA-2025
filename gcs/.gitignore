@@ -1,0 +1,41 @@
+# Do not commit real credentials / keys in this directory
+*.key.json
+*.service-account.json
+*.credentials.json
+*serviceaccount*.json
+*service-account*.json
+*credentials*.json
+*oauth*.json
+*token*.json
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+
+# Secrets / env files
+.env
+.env.*
+.secrets*
+secrets.*
+
+# Logs / backups / OS junk
+*.log
+*~
+.DS_Store
+
+# Allow the tracked example preset JSON
+!acl_preset.json
+!buckets.yaml
+!buckets.example.yaml
+!iam.bindings.example.yaml
+!sync_patterns.txt
+!README.md
+
+# Local scratch
+*.tmp
+*.bak
+*.cache
+
+
