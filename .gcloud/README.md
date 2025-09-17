@@ -8,13 +8,7 @@
 # - DVC での credentialpath 指定例（コメント）:
 #     dvc remote modify gcsremote credentialpath .gcloud/service-account.json
 
-Project名
-RSNA2025
-
-Project ID
-rsna2025-472412
-
-
-Billing ID
-01ED7C-640D7A-D495B1
-
+# プロジェクト情報（プレースホルダ。実値は記載しない）
+# Project Name: <your-project-name>
+# Project ID: <your-project-id>
+# Billing Account ID: <your-billing-account-id>
