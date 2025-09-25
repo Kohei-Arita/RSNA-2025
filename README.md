@@ -76,17 +76,6 @@
 
 ```
 RSNA-2025/
-├── .github/                    # GitHub設定・テンプレート
-│   ├── CODEOWNERS             # コードオーナー設定
-│   ├── CONTRIBUTING.md        # コントリビューションガイド
-│   ├── ISSUE_TEMPLATE/        # Issue テンプレート
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── SECURITY.md            # セキュリティポリシー
-│
-├── .gcloud/                  # GCS 認証関連（例のみ、実鍵は追跡しない）
-│   ├── service-account.example.json   # サービスアカウント鍵の例（コメントのみ）
-│   └── README.md                     # 認証手順メモ（ADC/SA, コメントのみ）
-│
 ├── configs/                   # Hydra設定ファイル群
 │   ├── config.yaml           # メイン設定・デフォルト値
 │   ├── aug/                  # データ拡張設定
@@ -178,6 +167,7 @@ RSNA-2025/
 ├── kaggle/                   # Kaggle サービング/ノートブック資材
 │   ├── kaggle_infer.py       # サービングAPIエントリポイント
 │   ├── kaggle_utils.py       # 付随ユーティリティ
+│   ├── README_KAGGLE.md
 │   ├── notebook_template.ipynb
 │   └── offline_requirements.txt
 │
@@ -185,6 +175,7 @@ RSNA-2025/
 │
 ├── tests/                    # 単体テスト・統合テスト
 │   ├── test_dataset.py       # データセットテスト
+│   ├── test_dicom_geometry.py # DICOM幾何テスト
 │   ├── test_transforms.py    # 前処理テスト
 │   ├── test_metrics.py       # 評価指標テスト
 │   └── test_inference.py     # 推論テスト
@@ -192,8 +183,10 @@ RSNA-2025/
 ├── tools/                    # ユーティリティスクリプト
 │   ├── export_onnx.py        # ONNXエクスポート
 │   ├── kaggle_sync.py        # Kaggleデータ同期
+│   ├── pack_precompute.py    # 前計算梱包
+│   ├── seed_everything.py    # 再現性確保
 │   ├── sweep_wandb.py        # W&Bスイープ実行
-│   └── seed_everything.py    # 再現性確保
+│   └── verify_submission.py  # 提出CSV検証（Dry-run専用）
 │
 ├── docs/                     # プロジェクト関連ドキュメント
 │   ├── README_ARCH.md        # GCS三層設計の要旨（コメント）
@@ -209,11 +202,9 @@ RSNA-2025/
 │   ├── requirements.lock     # ロックファイル（再現性）
 │   └── colab_setup.ipynb     # Colab初期設定ノートブック
 │
-├── .kaggle/                  # Kaggle API設定
-│   └── kaggle.json.example   # API認証ファイル例
-│
 ├── gcs/                      # GCS固有の運用補助（コメントのみ）
 │   ├── buckets.example.yaml      # バケット構成例（コメント）
+│   ├── buckets.yaml              # バケット構成（実体）
 │   ├── iam.bindings.example.yaml # ロール付与の雛形（コメント）
 │   ├── acl_preset.json           # ACL プリセット例（コメント）
 │   ├── sync_patterns.txt         # 軽量同期パターン（コメント）
@@ -238,6 +229,8 @@ RSNA-2025/
 ├── dvc.config.example        # DVC設定例（GCS remote の例, コメント）
 ├── pyproject.toml            # Python依存関係・メタデータ（真実源）
 ├── Makefile                  # 開発タスク自動化
+├── PROGRESS_CHECKLIST.md
+├── LICENSE
 └── README.md                 # このファイル
 ```
 
