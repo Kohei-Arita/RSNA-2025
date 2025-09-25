@@ -1,0 +1,235 @@
+0. プロジェクト特有の制約（最優先）
+
+Notebooks Only / Internet: Off：本番提出ノートブックは必ずオフライン実行（外部通信禁止）。
+GitHub
+
+起動後15分以内に serve()：評価API要件。ノートブック起動から15分以内に初期化完了＋serve()呼び出し。
+GitHub
+
+時間上限：目安は CPU/GPU ≤ 12h、TPU ≤ 9h。推論は time_budget_hours に合わせて自動ダウングレード（解像度→TTA→stride→候補数）。
+GitHub
+
+出力仕様：シリーズ単位で14ラベル（aneurysm_present+13部位）の確率を返すAPI提出（CSVはドライラン専用）。
+GitHub
+
+評価指標：14 AUCの加重平均（presenceに重み13、各部位1）。presenceヘッドの損失・校正を重視。
+GitHub
+
+設計思想：研究＝Colab、データ/成果物の真実源＝GCS（DVC remote）、提出＝Kaggleオフライン。Hydraで設定合成、W&Bでロギング（Kaggleでは無効化プリセットあり）。
+GitHub
++1
+
+1. タスク分類と適応的プロセス選択
+🟢 軽量タスク（簡略）
+
+例：configs/*の微修正、Notebookの小変更（10行以内）、tools/verify_submission.pyでの提出検証、Makefileターゲットの実行（train/infer/deps-freeze）等。
+GitHub
++1
+
+プロセス：簡易分析 → 即実行（Colab/ローカル）→ 簡潔報告
+
+🟡 標準タスク（標準）
+
+例：モデル・前処理の改善（src/rsna_aneurysm/*）、Hydraグループ追加（configs/model/* 等）、DVCステージ追加（dvc.yaml）、テスト追加（tests/*）。
+GitHub
+
+プロセス：分析 → チェックリスト → 実装 → 検証（単体/統合）→ 報告
+
+🔴 重要タスク（拡張＋承認必須）
+
+例：提出仕様に影響（kaggle/kaggle_infer.pyのI/Oやserve()時系列の変更）、データスキーム変更（DVCパイプライン・GCS配置規約）、セキュリティ/鍵取扱い、依存のメジャー更新、計算資源/コスト伴うGCP構成（infra/terraform）。
+GitHub
+
+プロセス：詳細分析 → 承認 → 段階実装 → 厳密検証 → 詳細報告
+
+2. 軽量タスク用プロセス 🟢
+
+簡易分析：
+
+要約：何をどこに（ファイル/関数/設定キー）反映するか1–2文で。
+
+主要リスク：Kaggleオフライン要件の逸脱・serve()遅延。
+GitHub
+
+実行と報告（例）
+
+**実行中**: [⏳] configs/inference/kaggle_fast.yaml の閾値を調整…
+**完了**: [✅] 変更反映＆ローカル検証OK（time_budget_hours内で推論ダウングレード動作を確認）
+
+3. 標準タスク用プロセス 🟡
+
+分析観点
+
+依存：pyproject.tomlは依存の真実源。Kaggle側はkaggle/offline_requirements.txtやenv/requirements.txt（生成物）準拠。
+GitHub
++1
+
+重要要件：Notebooks Only/Internet: Off、serve()制約、14ラベルI/F、時間ガード。
+GitHub
+
+データ経路：Kaggle API→DVC→GCS、data/配下のレイアウト。
+GitHub
++1
+
+潜在課題
+
+外部通信に依存するコード混入（Kaggleで失敗）。
+
+DICOM I/Oや前処理の重過ぎ（time_budget超過）。
+
+presenceヘッドの過/アンダーフィット（重み13）。
+GitHub
+
+実行計画（例）
+
+### 実行計画
+1. [独立] configs/model/vit.yaml のハイパラ試行追加 🟢
+2. [独立] tests/test_inference.py に回帰テスト追加 🟢
+3. [依存:1] src/inference.py のバッチ化最適化
+4. [依存:3] tools/export_onnx.py の更新
+5. [ブロッカー] kaggle/kaggle_infer.py のI/F変更 ⛔（提出仕様影響のため承認必須）
+
+
+進捗表示（例）
+
+**進行中**: [✅✅⏳⬜⬜] 2/5 完了 - 現在: 推論バッチ化を検証中（time_budget内を確認）
+**更新**: [✅✅✅⏳⬜] 3/5 完了 - 新規: 回帰テストgreen
+**完了**: [✅✅✅✅✅] 5/5 完了 - 所要: 8分（Colab検証）
+
+4. 重要タスク用プロセス 🔴（承認必須）
+
+対象例と承認理由
+
+kaggle/kaggle_infer.pyのI/O・serve()呼出し時序の変更（評価API互換性）。
+GitHub
+
+dvc.yamlの破壊的変更（データ資産・パイプライン影響）。
+
+依存のメジャーアップグレード（再現性・オフライン要件）。
+
+GCS/IaC（infra/terraform）でのコストや権限スコープ変更。
+GitHub
+
+段階実行
+
+フェーズ1（準備）：現状バックアップ/DVCスナップショット、outputs/とreports/の区別維持。
+GitHub
+
+フェーズ2（実装）：PoC→中間検証（ローカル/Colab）。
+
+フェーズ3（検証）：Kaggle模擬（外部通信禁止での完全再現）、統合テスト、time_budget内完走を確認。
+GitHub
+
+5. エラー処理の段階化
+🟢 警告: Lint/型/軽微なHydra警告 → 記録して継続
+🟡 エラー: 学習/推論失敗、DVC解決不可 → 3回まで自動修正/再試行後に報告
+🔴 致命: 提出I/F破壊、外部通信混入（Kaggle失敗） → 即停止・承認待ち
+⛔ セキュリティ: 秘密鍵/トークン露出、PHI取り扱い違反 → 全作業停止・緊急報告
+
+6. 実行時ベストプラクティス（RSNA-2025版）
+
+依存管理：pyproject.tomlを唯一の真実源とし、env/requirements.txt等は生成物。メジャー更新は承認が必要。
+GitHub
+
+DVC×GCS：データはDVC管理、GCSをremoteに。ColabからADC/SAで認証アクセス。
+GitHub
+
+Kaggle提出：kaggle/kaggle_infer.pyエントリ＋notebook_template.ipynbを土台に、通信なし・15分以内serve()・14ラベル出力を満たす。
+GitHub
+
+W&B：研究時は有効、Kaggleはwandb/disabled.yamlで無効化。
+GitHub
+
+出力の置き場：中間/再生成可能＝outputs/、永続共有＝reports/。
+GitHub
+
+テスト：tests/のデータ前処理/メトリクス/推論の回帰テストを拡充。
+GitHub
+
+7. 品質管理と検証
+
+軽量：基本動作とtime_budget内の完走確認（kaggle_fast.yaml基準）。
+GitHub
+
+標準：単体/統合テスト、OOF/メトリクス、presenceヘッドの校正（温度スケーリング等）を重視。
+GitHub
+
+重要：Kaggle完全再現（Internet: Off、serve()<=15分）、API互換性・評価式準拠。
+GitHub
+
+8. セキュリティと秘密情報
+
+.gcloud/や.kaggle/は例ファイルのみを追跡（実鍵・本物のkaggle.jsonは追跡禁止）。SA鍵/トークンは環境注入とし、PRレビュー前に検知チェック。
+GitHub
+
+docs/DATASET_CARD.mdに外部データ/事前学習重みの出所・ライセンス・再現手順を1回だけ明記。
+GitHub
+
+医用画像・DICOMの扱いはPHI禁止を前提（Kaggle配付に従う）。実名/個人情報を生成・復元しない。
+
+GitHubのSECURITY.md（.github配下）に従い、脆弱性報告フローを維持。
+GitHub
+
+9. レビューと承認基準
+
+承認が必要
+
+提出I/Fやserve()時序、推論出力フォーマット（14ラベル）に影響。
+GitHub
+
+DVC/データ配置規約の破壊的変更、依存のメジャー更新。
+
+GCPコスト/権限スコープ変更（infra/terraform）。
+GitHub
+
+禁止事項
+
+Kaggle提出での外部通信、serve()遅延、CSV単独提出（API必須）。
+GitHub
+
+実鍵のリポジトリ追跡（.gcloud/*, .kaggle/*）。
+GitHub
+
+重要タスクでの承認スキップ。
+
+10. 進捗・コンテキスト運用
+
+進捗はPROGRESS_CHECKLIST.mdに追記（最新を先頭）。
+GitHub
+
+実験はexperiments/expXXXX/*にスナップショット（設定/ノート/メモ）。
+GitHub
+
+Makefileが利用可能な環境では make train / make infer / make deps-freeze を活用。
+GitHub
+
+11. 実行例（RSNA-2025）
+🟢 軽量タスク例
+**タスク**: kaggle_fastのTTA段数を1→0
+**分類**: 🟢
+**実行**: [⏳] 設定変更 → [✅] time_budget内で完走（オフライン前提）
+**結果**: presence AUC維持、総時間-12%
+
+🟡 標準タスク例
+**タスク**: 2.5Dモデルの追加（configs/model/two_point_five_d.yaml）
+**分類**: 🟡
+### 実行計画
+1. [独立] 新config追加 🟢
+2. [独立] tests/test_inference.pyに回帰ケース追加 🟢
+3. [依存:1] src/transforms.pyを2.5D対応
+4. [依存:3] src/inference.pyのタイル戦略調整
+5. [依存:1-4] ColabでOOF→Kaggle模擬（Internet: Off）
+
+🔴 重要タスク例
+**タスク**: kaggle_infer.pyのI/F変更（出力スキーマ改定）
+**分類**: 🔴（提出仕様に影響）
+**承認待ち**:
+- 影響範囲: 14確率出力、評価API互換性、回帰テスト
+- リスク: 評価不可/失格、time_budget逸脱
+- 軽減策: 既存I/Fを保持するデュアル実装、完全オフライン模擬で回帰
+
+補足
+
+本ルールはREADME/構成の明記事項を反映しています。詳細は該当セクションを参照してください（Kaggle提出条件、評価指標、Hydra/DVC/W&B、kaggle資材、tests等）。
+GitHub
++1
