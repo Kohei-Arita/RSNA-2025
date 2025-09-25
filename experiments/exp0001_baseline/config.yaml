@@ -1,1 +1,47 @@
+# exp0001_baseline 実験設定
 # 実験時点の configs スナップショット（Hydra合成結果の凍結）
+
+experiment:
+  name: exp0001_baseline
+  description: "GradientBoostingベースライン - 年齢、性別、モダリティ特徴量のみ"
+  date: "2024-12"
+  
+model:
+  type: GradientBoostingClassifier
+  params:
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: 8
+    random_state: 130
+    
+features:
+  - age (numerical, median imputed)
+  - sex (binary, Male=1)
+  - modality (one-hot encoded)
+  
+target:
+  name: "Aneurysm Present"
+  type: binary_classification
+  
+validation:
+  method: stratified_train_test_split
+  test_size: 0.2
+  random_state: 130
+  
+metrics:
+  primary: AUC-ROC
+  secondary:
+    - sensitivity
+    - specificity
+    - confusion_matrix
+    
+outputs:
+  models: models/exp0001_baseline/
+  oof: outputs/oof/exp0001_baseline/
+  predictions: outputs/preds/exp0001_baseline/
+  
+notes: |
+  初期ベースライン実験。
+  特徴量は最小限（年齢、性別、モダリティ）のみ。
+  画像データは未使用。
+  学習済みモデルはpickle形式で保存。
