@@ -33,13 +33,56 @@ LABEL_COLS: List[str] = [
 
 
 def load_gbm_and_metadata(models_dir: str) -> tuple[Any, Dict[str, Any]]:
-    """gbm_baseline.pkl と metadata.json を読み込む。
-    - models_dir 例: "/kaggle/input/rsna2025-weights/exp0001_baseline"
+    """学習済みGBMとメタデータを読み込む。
+    優先順位:
+      1) 環境変数 MODEL_PATH, METADATA_PATH があればそれを使用
+      2) models_dir 配下で既知の候補名を探索（ファイル名バリアント対応）
+    既知の候補:
+      - モデル: ["gbm_baseline.pkl", "GBM Baseline.pkl", "GBM_Baseline.pkl"]
+      - メタ:   ["metadata.json", "Metadata.json", "Complete Workflow Metadata.json", "Complete_Workflow_Metadata.json"]
     """
+    env_model = os.getenv('MODEL_PATH')
+    env_meta = os.getenv('METADATA_PATH')
+    if env_model and env_meta:
+        with open(env_model, 'rb') as f:
+            gbm = pickle.load(f)
+        with open(env_meta, 'r') as f:
+            metadata = json.load(f)
+        return gbm, metadata
+
     models_path = Path(models_dir)
-    with open(models_path / 'gbm_baseline.pkl', 'rb') as f:
+    if not models_path.exists():
+        raise FileNotFoundError(f"models_dir not found: {models_dir}")
+
+    model_candidates = [
+        'gbm_baseline.pkl',
+        'GBM Baseline.pkl',
+        'GBM_Baseline.pkl',
+    ]
+    meta_candidates = [
+        'metadata.json',
+        'Metadata.json',
+        'Complete Workflow Metadata.json',
+        'Complete_Workflow_Metadata.json',
+    ]
+
+    def _find_first(path: Path, names: list[str]) -> Path | None:
+        for name in names:
+            p = path / name
+            if p.exists():
+                return p
+        return None
+
+    model_path = _find_first(models_path, model_candidates)
+    meta_path = _find_first(models_path, meta_candidates)
+    if model_path is None:
+        raise FileNotFoundError(f"Model file not found under {models_dir}. Tried: {model_candidates}")
+    if meta_path is None:
+        raise FileNotFoundError(f"Metadata file not found under {models_dir}. Tried: {meta_candidates}")
+
+    with open(model_path, 'rb') as f:
         gbm = pickle.load(f)
-    with open(models_path / 'metadata.json', 'r') as f:
+    with open(meta_path, 'r') as f:
         metadata = json.load(f)
     return gbm, metadata
 

@@ -168,7 +168,7 @@ RSNA-2025/
 │   ├── kaggle_infer.py       # サービングAPIエントリポイント
 │   ├── kaggle_utils.py       # 付随ユーティリティ
 │   ├── README_KAGGLE.md
-│   ├── notebook_template.ipynb
+│   ├── notebook_template.ipynb（任意）
 │   └── offline_requirements.txt
 │
 ├── submissions/              # Kaggle提出ファイル（サービングAPI移行によりCSVはDry-run用途）
@@ -472,9 +472,17 @@ make kaggle-prep  # dist/rsna2025-precompute/ を生成（現状は雛形）
 - 「Edit » Notebook settings」等から Internet: Off を選択し、保存してから実行する。
   - Notebook-only 競技ではインターネット無効や外部データ可否がルールで定義。詳細はコンペの Code 要件パネル/FAQ を参照。
 
-- Notebook: `kaggle/notebook_template.ipynb` をアップロード
-- 「Add data」で `rsna2025-precompute` と `rsna2025-weights` を追加（重み Dataset は Public を推奨［再現性のため］。依存wheelも必要なら `rsna2025-wheels` を追加）
-- `kaggle/kaggle_infer.py` をサーバ実装として起動し、起動後15分以内に初期化完了→`serve()` を呼び出して待受（シリーズごとに14確率を応答）
+- Notebook は任意（テンプレ不要）。Add data 後に `kaggle/kaggle_infer.py` を実行（起動後15分以内に待受へ）
+- 例（ユーザーDatasetを利用する場合）: 環境変数で重みの場所を指定して起動
+```bash
+export WEIGHTS_DIR=/kaggle/input/exp001-rsna
+export MODELS_SUBDIR=
+# または直接ファイル指定:
+# export MODEL_PATH="/kaggle/input/exp001-rsna/GBM Baseline.pkl"
+# export METADATA_PATH="/kaggle/input/exp001-rsna/Complete Workflow Metadata.json"
+python kaggle/kaggle_infer.py --serve
+```
+- （任意）`rsna2025-precompute` や `rsna2025-weights` を Add data してもよい（依存 wheel がある場合は `rsna2025-wheels` を追加し、`kaggle/offline_requirements.txt` を `--no-index` で適用）
 
 - **重要**: サーバ初期化は起動後15分以内に完了し、必ず `serve()` を呼び出すこと（評価API要件）[^serve15]
 
@@ -542,7 +550,7 @@ make kaggle-dryrun  # .work/submission.csv を生成（現状は空の雛形）
 ## 変更点（この改訂で追加された骨組み）
 
 - `configs/paths/kaggle.yaml`, `configs/wandb/disabled.yaml`, `configs/inference/kaggle_fast.yaml`（time_budget_hours を基準に完走を優先する軽量設定）
-- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb, offline_requirements.txt）
+- `kaggle/` ディレクトリ（README_KAGGLE, kaggle_infer.py, kaggle_utils.py, notebook_template.ipynb（任意）, offline_requirements.txt）
 - `tools/pack_precompute.py`（再サンプル/脳マスク/候補点の前計算梱包スケルトン）, `tools/verify_submission.py`（提出検証スケルトン）
 - `tests/test_dicom_geometry.py`（現状 skip）
 - `Makefile` の kaggle タスク（prep/dryrun/wheels）
