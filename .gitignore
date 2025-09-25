@@ -91,6 +91,8 @@ ENV/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
+# allow experiments notebooks to be tracked
+!experiments/**/*.ipynb
 
 # DVC
 .dvc/tmp/
