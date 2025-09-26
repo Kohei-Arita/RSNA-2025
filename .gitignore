@@ -93,6 +93,8 @@ ENV/
 *.ipynb
 # allow experiments notebooks to be tracked
 !experiments/**/*.ipynb
+# allow kaggle notebook template to be tracked
+!kaggle/notebook_template.ipynb
 
 # DVC
 .dvc/tmp/
