@@ -64,7 +64,11 @@ def _serve_loop(gbm: Any, metadata: Dict[str, Any]) -> None:
     入力: 1行に1 JSON: {"SeriesInstanceUID": str, "PatientAge": str, "PatientSex": str, "Modality": str}
     出力: 1行に1 JSON: {"SeriesInstanceUID": str, "probs": {label: float, ...}}
     """
-    sys.stdout.reconfigure(line_buffering=True)
+    # Kaggle環境でのreconfigure対応
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass  # Kaggle環境では無視
     for line in sys.stdin:
         line = line.strip()
         if not line:
