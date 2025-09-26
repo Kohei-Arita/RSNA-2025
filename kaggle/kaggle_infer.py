@@ -36,8 +36,9 @@ from kaggle.kaggle_utils import (
 WORK_DIR = os.getenv("WORK_DIR", "/kaggle/working")
 INPUT_DIR = os.getenv("INPUT_DIR", "/kaggle/input")
 PRECOMP_DIR = os.path.join(INPUT_DIR, "rsna2025-precompute")
-WEIGHTS_DIR = os.path.join(INPUT_DIR, "rsna2025-weights")
-MODELS_SUBDIR = os.getenv("MODELS_SUBDIR", "exp0001_baseline")
+# 実際のKaggle環境パスに合わせて修正
+WEIGHTS_DIR = os.getenv("WEIGHTS_DIR", os.path.join(INPUT_DIR, "exp001-rsna"))
+MODELS_SUBDIR = os.getenv("MODELS_SUBDIR", "")
 SUBMIT_PATH = os.path.join(WORK_DIR, "submission.csv")
 
 @dataclass
