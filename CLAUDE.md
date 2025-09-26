@@ -11,6 +11,10 @@ This is an RSNA Intracranial Aneurysm Detection competition project designed wit
 
 The project uses Hydra for configuration management, Weights & Biases for experiment tracking, and follows a strict separation between research and submission environments.
 
+## 🚨 CRITICAL DATA POLICY
+
+**NEVER USE DUMMY OR DEFAULT DATA**: This is a medical imaging competition with real patient data. Always use actual data from GCS (`gs://rsna2025-prod/`) via authenticated access. Never create, generate, or use placeholder/synthetic/dummy data for any purpose - including testing, debugging, or prototyping. All data must come from the official competition dataset stored in Google Cloud Storage.
+
 ## ⚠️ Current Implementation Status
 
 **CRITICAL**: Most Python files in `src/rsna_aneurysm/` contain only comment stubs and require implementation:
@@ -96,11 +100,32 @@ python -m pytest tests/ -v
 
 ## Architecture & Code Structure
 
+### Three-Tier Architecture Deep Dive
+
+**Research Layer (Colab Environment)**:
+- Full Google Cloud integration with `paths=colab` configuration
+- Unlimited access to 311GB dataset via DVC (`dvc pull/push` workflows)
+- Interactive development with W&B experiment tracking
+- Complete Python ecosystem: `pip install -r env/requirements.txt`
+
+**Storage Layer (GCS + DVC)**:
+- Data versioning: DVC manages competition data via GCS remote
+- Compression strategy: npz/float16 for volumes, parquet for metadata
+- Artifact tracking: Models, preprocessed volumes, fold assignments
+- Access pattern: Research pulls full data, submission uses precomputed subsets
+
+**Submission Layer (Kaggle Constraints)**:
+- Internet disabled, ~20GB input limit, 9-12 hour time budget
+- Serving architecture: STDIN/STDOUT JSON API (`kaggle/kaggle_infer.py --serve`)
+- Automatic downgrading: resolution→TTA→stride→candidates under time pressure
+- Configuration: `paths=kaggle wandb=disabled inference=kaggle_fast`
+
 ### Core Components
 
 **CLI Entry Point**: `src/rsna_aneurysm/cli.py`
 - Unified command-line interface for train/infer/eval operations
 - Uses Hydra for configuration composition and overrides
+- Supports environment switching via configuration composition
 
 **Data Pipeline**:
 - `src/rsna_aneurysm/dataset.py`: DICOM processing and dataset implementation
@@ -124,6 +149,20 @@ python -m pytest tests/ -v
 - `src/rsna_aneurysm/visualization.py`: Visualization tools (Grad-CAM, learning curves)
 
 ### Configuration System (Hydra)
+
+**Composition Patterns**: Hydra enables sophisticated configuration mixing:
+```bash
+# Environment switching
+train paths=colab     # Research environment with full capabilities
+infer paths=kaggle wandb=disabled inference=kaggle_fast  # Submission constraints
+
+# Multi-component mixing
+train model=baseline_2d cv=patient_kfold train=base,fp16 data=rsna
+#     ↑architecture  ↑CV strategy      ↑training modes   ↑dataset
+
+# Multi-run experiments
+train model=efficientnet,convnext cv=patient_kfold --multirun
+```
 
 **Main Config**: `configs/config.yaml` - Central defaults and composition rules
 
@@ -163,13 +202,23 @@ python -m pytest tests/ -v
 - `tools/pack_precompute.py`: Packages precomputed data for Kaggle datasets
 - `tools/verify_submission.py`: Validates submission format (local testing only)
 
-**Time Budget Management**:
-The system implements automatic downgrading when approaching time limits:
-1. Reduce TTA (Test Time Augmentation)
-2. Increase patch stride (coarser sampling)
-3. Reduce candidate count limit
-4. Reduce input resolution
-Priority is "complete execution within time budget" over maximum accuracy.
+**Time Budget Management Architecture**:
+Automatic quality degradation under Kaggle's 9-12 hour time constraint:
+```python
+# Progressive quality reduction when time running out:
+if eta_remaining < threshold:
+    disable_tta()           # Remove test-time augmentation
+    increase_patch_stride() # Coarser spatial sampling
+    reduce_candidates()     # Fewer candidate detection points
+    lower_resolution()      # Reduce input image resolution
+```
+Priority: "complete execution within time budget" over maximum accuracy.
+
+**Serving API Contract**:
+- Input: JSON with `series_id` via STDIN
+- Output: 14 probability labels [0,1] per series via STDOUT
+- Format: `aneurysm_present` + 13 anatomical location probabilities
+- Constraint: Must work offline with precomputed data only
 
 ## Important Development Notes
 
@@ -189,12 +238,21 @@ Priority is "complete execution within time budget" over maximum accuracy.
 - CV fold assignments should be fixed and versioned for reproducibility
 - All experiments must use consistent fold definitions
 
-### Code Quality Requirements
-- **Priority 1**: Implement DICOM geometry tests (`tests/test_dicom_geometry.py`) - currently skipped
-- **Priority 2**: Implement core data pipeline (dataset.py, dicom_utils.py, transforms.py)
-- **Priority 3**: Implement model architecture and training loop (model.py, loss.py)
-- Geometric consistency (spacing, orientation, intensity scaling) must be verified before training
-- Failure in geometry tests should halt training/inference operations
+### Code Quality Requirements & Medical Imaging Constraints
+
+**🚨 DICOM Geometry Validation (BLOCKING)**:
+- **Requirement**: `tests/test_dicom_geometry.py` must pass before ANY training/inference
+- **Critical validations**: RescaleSlope/Intercept, coordinate systems (LPS/RAS), voxel spacing consistency
+- **Patient coordinate conversion**: mm coordinates ↔ voxel indices must be mathematically verified
+- **Failure mode**: Training/inference operations HALT if geometry tests fail
+- **Medical significance**: Incorrect geometry → wrong anatomical locations → patient harm
+
+**Implementation Priority Order**:
+1. **DICOM geometry tests** - blocking requirement, prevents all downstream work
+2. **Core data pipeline** - dataset.py, dicom_utils.py, transforms.py with real GCS data
+3. **Model architecture** - dual-head for aneurysm presence + 13 anatomical locations
+4. **Cross-validation** - patient-level splits, no data leakage
+5. **Kaggle packaging** - time budget management, automatic quality degradation
 
 ### Competition Submission Requirements
 - **Format**: Server must respond with 14-label probabilities [0,1] per series_id
